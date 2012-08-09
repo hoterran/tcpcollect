@@ -216,12 +216,10 @@ void pkt_stat (u_char *user, const struct pcap_pkthdr *h, const u_char *s)
     int command = commandSql[0];
     commandSql[packet_length] = '\0';
 
-	printf("%d-%d-%d %d:%d:%d caplen:%d len:%d %s:%d->%s:%d ip_total_bytes:%d %d %s\n\n", 
+	printf("%d-%d-%d %d:%d:%d [%d] %s\n\n", 
 		1900+tm->tm_year, 1+tm->tm_mon, tm->tm_mday, 
 		tm->tm_hour, tm->tm_min, tm->tm_sec,
-		h->caplen, h->len,
-		src_ip, src_port, dst_ip, dst_port,
-		ntohs(iphdr->ip_len), command, commandSql + 1);
+		 command, commandSql + 1);
 
 	return;
 }
