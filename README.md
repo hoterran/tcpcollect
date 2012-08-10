@@ -6,9 +6,9 @@ lipcap
 
 ##compile & use
 
-	gcc -g -o x mysqlrstat.c -lpap
+	gcc -g -o mp mysqlrstat.c -lpap
 
-	sudo ./x
+	sudo ./mp
 
 	2012-8-9 21:27:1 [3] select 1
 
