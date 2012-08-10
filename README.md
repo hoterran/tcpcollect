@@ -45,3 +45,12 @@ lipcap
 	timestamp [commandType] sql
 
 
+
+##TODO
+
+###response_time
+	each sql latency 
+
+###resultset
+	each sql result set
+
