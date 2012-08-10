@@ -1,12 +1,18 @@
 #mysqlpcap
 
+watch sql base libpcap
+
+
 ##dependency
 lipcap
 
 
-##compile & use
+##compile
 
 	gcc -g -o mp mysqlrstat.c -lpap
+
+
+##use
 
 	sudo ./mp
 
@@ -45,7 +51,6 @@ lipcap
 	timestamp [commandType] sql
 
 
-
 ##TODO
 
 ###response_time
@@ -53,4 +58,5 @@ lipcap
 
 ###resultset
 	each sql result set
+
 
