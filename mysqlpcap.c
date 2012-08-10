@@ -27,12 +27,11 @@ typedef unsigned long ulong;
     (((uint32) ((uchar) (A)[1])) << 8) +\
     (((uint32) ((uchar) (A)[2])) << 16))
 
-
 #define	OK	    (0)
 #define	ERR	    (-1)
 #define	PEND	(1)
 
-#define SIZE_IP 16
+#define SIZE_IP         16
 #define	SIZE_ETHERNET	14
 #define ETHER_ADDR_LEN	6
 #define HOSTNAME_LEN	128
@@ -41,6 +40,14 @@ typedef unsigned long ulong;
 #define	PKT_TYPE_UDP	2
 
 #define	OUTPUT_INTERVAL	300
+
+#define	L_ERROR	0
+#define	L_WARN	1
+#define	L_INFO	2
+
+
+
+#define CAPLEN 65535
 
 /* Ethernet header */
 struct sniff_ethernet {
@@ -53,11 +60,11 @@ struct sniff_ethernet {
 #define SLL_ADDRLEN     8               /* length of address field */
         
 struct sll_header {                                                                                                           
-    u_int16_t       sll_pkttype;    /* packet type */
-    u_int16_t       sll_hatype;     /* link-layer address type */
-    u_int16_t       sll_halen;      /* link-layer address length */
+    u_int16_t       sll_pkttype;        /* packet type */
+    u_int16_t       sll_hatype;         /* link-layer address type */
+    u_int16_t       sll_halen;          /* link-layer address length */
     u_int8_t        sll_addr[SLL_ADDRLEN];  /* link-layer address */
-    u_int16_t       sll_protocol;   /* protocol */
+    u_int16_t       sll_protocol;       /* protocol */
 };
 
 /* IP header */
@@ -118,25 +125,20 @@ typedef struct statArgTag {
 	uint8_t		pktType;
 } StatArg;
 
-typedef struct agentInfoTag {
+typedef struct _MysqlPcap {
     char        hostname[HOSTNAME_LEN];
     pcap_t      *pd;
+    int         mysqlPort;
     char        filter[10240];
+    char        netDev[10];
     bpf_u_int32 netmask;
-} AgentInfo; 
+    bpf_u_int32 localnet;
+    char        logfile[256];
+    char        keyWord[256];
+} MysqlPcap;
 
-AgentInfo	Gagent;
 
 uint8_t		GoutputFlg = 0;
-int		    Port;
-char		GredisPw[64];
-char		Gdev[64];
-
-int init_agent(AgentInfo *agent);
-
-#define	L_ERROR	0
-#define	L_WARN	1
-#define	L_INFO	2
 
 void
 alog (int level, char *fmt, ...)
@@ -170,22 +172,17 @@ alog (int level, char *fmt, ...)
 	return;
 }
 
-void pkt_stat (u_char *user, const struct pcap_pkthdr *h, const u_char *s)
-{
+void 
+pkt_stat (MysqlPcap* mp, const struct pcap_pkthdr *h, const u_char *s) {
+
 	struct tm	*tm;
-	time_t		timeStampSec; 
 	char		src_ip[16], dst_ip[16];
 	uint16_t	src_port, dst_port;
-	StatArg		*statArg;
 
-	statArg = (StatArg *)user;
-
-	timeStampSec = h->ts.tv_sec;
-	tm = localtime(&timeStampSec);
-
-	//use any device, so not ethernet, but sll protocol
+	//use any device(bond?),  not ethernet, but sll protocol
 	//ethernet = (struct sniff_ethernet*)(s);
 	//sllhdr = (struct sll_header*)(s);
+
 	iphdr = (struct sniff_ip *)(s + SIZE_ETHERNET);
 	//iphdr = (struct sniff_ip *)(s + SLL_HDR_LEN);
 	size_iphdr = IP_HL(iphdr)*4;
@@ -208,39 +205,39 @@ void pkt_stat (u_char *user, const struct pcap_pkthdr *h, const u_char *s)
 	src_port = ntohs(tcphdr->th_sport);
 	dst_port = ntohs(tcphdr->th_dport);
 
-    char* payload = s + SIZE_ETHERNET + size_iphdr + size_tcphdr;
+    char* payload = (char*)(s + SIZE_ETHERNET + size_iphdr + size_tcphdr);
+    //char* payload = s + SLL_HDR_LEN + size_iphdr + size_tcphdr;
 
+    /* start mysql protocol */
     ulong packet_length = uint3korr(payload);
 
-    char * commandSql = payload + 4;
+    char *commandSql = payload + 4;
     int command = commandSql[0];
     commandSql[packet_length] = '\0';
 
-	printf("%d-%d-%d %d:%d:%d [%d] %s\n\n", 
-		1900+tm->tm_year, 1+tm->tm_mon, tm->tm_mday, 
-		tm->tm_hour, tm->tm_min, tm->tm_sec,
-		 command, commandSql + 1);
+	printf("%ld - %ld [%d] %s\n\n", 
+        h->ts.tv_sec, h->ts.tv_usec, command, commandSql + 1);
 
 	return;
 }
 
-int init_agent (AgentInfo *agent) {
+int 
+set_filter (MysqlPcap *mp) {
 
 	struct bpf_program  fcode;
-	struct timeval		timeout = {3, 0};
-	int	i;
+    char filter[256];
 
-    snprintf(agent->filter, sizeof(agent->filter), 
-        "%s", "dst port 3306 and tcp[tcpflags] & (tcp-push) != 0");
+    snprintf(filter, sizeof(filter), 
+        "dst port %d and tcp[tcpflags] & (tcp-push) != 0", mp->mysqlPort);
 
-    if (pcap_compile(agent->pd, &fcode, agent->filter, 0, agent->netmask) < 0) {
-        alog(L_WARN, "pcap_compile failed: %s", pcap_geterr(agent->pd));
+    if (pcap_compile(mp->pd, &fcode, filter, 0, mp->netmask) < 0) {
+        alog(L_WARN, "pcap_compile failed: %s", pcap_geterr(mp->pd));
         pcap_freecode(&fcode);
         return ERR;
     }
 
-    if (pcap_setfilter(agent->pd, &fcode) < 0) {
-        alog(L_WARN, "pcap_setfilter failed: %s", pcap_geterr(agent->pd));
+    if (pcap_setfilter(mp->pd, &fcode) < 0) {
+        alog(L_WARN, "pcap_setfilter failed: %s", pcap_geterr(mp->pd));
         pcap_freecode(&fcode);
         return ERR;
     }
@@ -276,7 +273,8 @@ int daemon_init(void) {
     return OK;
 }
 
-void sig_pipe_handler(int sig) {
+void 
+sig_pipe_handler(int sig) {
         return;
 }      
 
@@ -294,7 +292,7 @@ int single_process(char *process_name)
         printf("Cant fopen file %s for %s\n", lockfile, strerror(errno)); 
         return -1;
     }                                                                                                                     
-    //F_LOCK will hang until unlock, F_TLOCK will return asap
+    /* F_LOCK will hang until unlock, F_TLOCK will return asap */
     int ret = lockf(lock_fd, F_TLOCK, 0);
     
     if (ret == 0) {
@@ -305,13 +303,15 @@ int single_process(char *process_name)
     }
 }
 
-void sig_init(void)
+void 
+sig_init(void)
 {
 	/*
-		block some sig
-		SIGTERM
-		SIGHUP
-		SIGPIPE
+     *		block 
+     *          SIGTERM SIGHUP SIGPIPE
+     *
+     *      handler
+     *          SIGALRM
 	*/
     sigset_t intmask;
    
@@ -331,96 +331,98 @@ void sig_init(void)
     sigaddset(&act2.sa_mask, SIGPIPE);
    
     sigaction(SIGPIPE, &act2, 0);
+
+	signal(SIGALRM, switch_flg);
+}
+
+void 
+init(MysqlPcap *mp) {
+    mp->mysqlPort = 3306;
+    snprintf(mp->netDev, sizeof(mp->netDev), "%s", "eth0");
 }
 
 int
-main (int argc, char **argv)
-{
-	char			ebuf[PCAP_ERRBUF_SIZE];
-	pcap_t			*pd = NULL;
-	bpf_u_int32		localnet, netmask;
-	StatArg			statArg;
-	u_char			*pcapUserData;
-	char			ch;
-	char			usage[] = "Usage:\n\tmysqlstat -p [port] \n";
-	struct pcap_pkthdr	*pcap_pkthdr;
-	u_char			*pkt_data;
+main (int argc, char **argv) {
 
-	//daemon_init();
+	char usage[] = "Usage:\n\tmysqlstat -p [port] mysql port default 3306\n"
+                    "\t -d daemon default yes\n \t -f [filename] default tty\n"
+                    "\t -i [dev]\n";
 
-	statArg.pktType = PKT_TYPE_TCP;
-	pcapUserData = (u_char *)&statArg;
+	char ebuf[PCAP_ERRBUF_SIZE];
 
-	//signal(SIGALRM, switch_flg);
+	u_char *pkt_data = malloc(CAPLEN);
+	struct pcap_pkthdr *pcap_pkthdr = malloc(sizeof(struct pcap_pkthdr));
+    MysqlPcap *mp = calloc(1, sizeof(*mp));
 
-	if (0 != single_process(argv[0]))
-		return -1;
+    if ((NULL == pcap_pkthdr) || (NULL == pkt_data) || (NULL == mp)) return ERR;
 
-	sig_init();
+    init(mp);
 
-	memset(&Gagent, 0, sizeof(Gagent));
-
-    while (-1 != (ch = getopt(argc, argv, "p"))) {
+	char ch;
+    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:"))) {
         switch (ch) {
             case 'p' :
-                Port = atoi(optarg);
+                mp->mysqlPort = atoi(optarg);
                 break;
+            case 'd' :
+                daemon_init();
+                break;
+            case 'f':
+                snprintf(mp->logfile, sizeof(mp->logfile), "%s", optarg);
+                break;
+            case 'k' :
+                snprintf(mp->keyWord, sizeof(mp->keyWord), "%s", optarg); 
+                break; 
+            case 'i' :
+                snprintf(mp->netDev, sizeof(mp->netDev), "%s", optarg); 
+                break; 
             default:
                 printf("-%s", usage);
                 return ERR;
         }
     }
 
-    /* clear argv, avoid saw password */
-	int i;
-	for (i = 1; i < argc; i++) {
-		memset(argv[i], 0, strlen(argv[i]));
-	}
+	if (0 != single_process(argv[0])) return ERR; 
 
-    if (strlen(Gdev) == 0)
-        snprintf(Gdev, sizeof(Gdev), "%s", "bond0");
+	sig_init();
 
-	pd = pcap_open_live(Gdev, 65535, 0, 0, ebuf);
+	mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
 
-	if (NULL == pd) {
-		alog(L_ERROR, "pcap_open_live error: %s - %s\n", Gdev, ebuf);
+	if (NULL == mp->pd) {
+		alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
 
-        snprintf(Gdev, sizeof(Gdev), "%s", "lo");
-		pd = pcap_open_live(Gdev, 65535, 0, 0, ebuf);
-		if (NULL == pd) {
-            alog(L_ERROR, "pcap_open_live error: %s - %s\n", Gdev, ebuf);
-			printf("pcap_open_live error: %s - %s\n", Gdev, ebuf);
+        snprintf(mp->netDev, sizeof(mp->netDev), "%s", "bond0");
+		mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
+
+		if (NULL == mp->pd) {
+            alog(L_ERROR, "pcap_open_live error: %s - %s\n", "bond0", ebuf);
+			printf("pcap_open_live error: %s - %s\n", "bond0", ebuf);
 			return ERR;
 		}
 	}
 
-	Gagent.pd = pd;
-
-	if (pcap_lookupnet(Gdev, &localnet, &netmask, ebuf) < 0) {
-        alog(L_ERROR, "pcap_open_live error: %s - %s\n", Gdev, ebuf);
+	if (pcap_lookupnet(mp->netDev, &mp->localnet, &mp->netmask, ebuf) < 0) {
+        alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
 		printf("pcap_lookupnet error: %s", ebuf);
 		return ERR;
 	}
 
-    alog(L_INFO, "Listen device is %s", Gdev);
+    alog(L_INFO, "Listen Device is %s", mp->netDev);
 
-	Gagent.netmask = netmask;
-
-    init_agent(&Gagent);
-
-    pcap_pkthdr = calloc(1, sizeof(struct pcap_pkthdr));
-	pkt_data = calloc(1500, sizeof(u_char));
-
-	/* set alarm */
-	alarm(OUTPUT_INTERVAL);
+    if (ERR == set_filter(mp)) return ERR;
 
 	for (;;) {
-		if (1 == pcap_next_ex(pd, &pcap_pkthdr, (const u_char **)&pkt_data)) {
-			pkt_stat(pcapUserData, pcap_pkthdr, pkt_data);
+		if (1 == pcap_next_ex(mp->pd, &pcap_pkthdr, (const u_char **)&pkt_data)) {
+			pkt_stat(mp, pcap_pkthdr, pkt_data);
 		}
 	}
 
-	pcap_close(pd);
+	pcap_close(mp->pd);
+    free(mp);
+    free(pkt_data);
+    free(pcap_pkthdr);
+
+    alog(L_INFO, "why go here ?");
 	return OK;
 }
 
