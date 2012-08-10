@@ -27,33 +27,31 @@ typedef unsigned long ulong;
     (((uint32) ((uchar) (A)[1])) << 8) +\
     (((uint32) ((uchar) (A)[2])) << 16))
 
-#define	OK	    (0)
-#define	ERR	    (-1)
-#define	PEND	(1)
+#define OK      (0)
+#define ERR     (-1)
+#define PEND    (1)
 
 #define SIZE_IP         16
-#define	SIZE_ETHERNET	14
-#define ETHER_ADDR_LEN	6
-#define HOSTNAME_LEN	128
+#define SIZE_ETHERNET   14
+#define ETHER_ADDR_LEN  6
+#define HOSTNAME_LEN    128
 
-#define	PKT_TYPE_TCP	1
-#define	PKT_TYPE_UDP	2
+#define PKT_TYPE_TCP    1
+#define PKT_TYPE_UDP    2
 
-#define	OUTPUT_INTERVAL	300
+#define OUTPUT_INTERVAL 300
 
-#define	L_ERROR	0
-#define	L_WARN	1
-#define	L_INFO	2
-
-
+#define L_ERROR 0
+#define L_WARN  1
+#define L_INFO  2
 
 #define CAPLEN 65535
 
 /* Ethernet header */
 struct sniff_ethernet {
-	u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
-	u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
-	u_short ether_type;                 /* IP? ARP? RARP? etc */
+    u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
+    u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
+    u_short ether_type;                 /* IP? ARP? RARP? etc */
 };
 
 #define SLL_HDR_LEN     16              /* total header length */
@@ -69,19 +67,19 @@ struct sll_header {
 
 /* IP header */
 struct sniff_ip {
-	u_char ip_vhl;		/* version << 4 | header length >> 2 */
-	u_char ip_tos;		/* type of service */
-	u_short ip_len;		/* total length */
-	u_short ip_id;		/* identification */
-	u_short ip_off;		/* fragment offset field */
-#define IP_RF 0x8000		/* reserved fragment flag */
-#define IP_DF 0x4000		/* dont fragment flag */
-#define IP_MF 0x2000		/* more fragments flag */
-#define IP_OFFMASK 0x1fff	/* mask for fragmenting bits */
-	u_char ip_ttl;		/* time to live */
-	u_char ip_p;		/* protocol */
-	u_short ip_sum;		/* checksum */
-	struct in_addr ip_src,ip_dst; /* source and dest address */
+    u_char ip_vhl;		/* version << 4 | header length >> 2 */
+    u_char ip_tos;		/* type of service */
+    u_short ip_len;		/* total length */
+    u_short ip_id;		/* identification */
+    u_short ip_off;		/* fragment offset field */
+    #define IP_RF 0x8000		/* reserved fragment flag */
+    #define IP_DF 0x4000		/* dont fragment flag */
+    #define IP_MF 0x2000		/* more fragments flag */
+    #define IP_OFFMASK 0x1fff	/* mask for fragmenting bits */
+    u_char ip_ttl;		/* time to live */
+    u_char ip_p;		/* protocol */
+    u_short ip_sum;		/* checksum */
+    struct in_addr ip_src,ip_dst; /* source and dest address */
 };
 
 #define IP_HL(ip)		(((ip)->ip_vhl) & 0x0f)
@@ -89,14 +87,14 @@ struct sniff_ip {
 
 /* TCP header */
 struct sniff_tcp {
-	uint16_t th_sport;	/* source port */
-	uint16_t th_dport;	/* destination port */
-	uint32_t th_seq;	/* sequence number */
-	uint32_t th_ack;	/* acknowledgement number */
+    uint16_t th_sport;	/* source port */
+    uint16_t th_dport;	/* destination port */
+    uint32_t th_seq;	/* sequence number */
+    uint32_t th_ack;	/* acknowledgement number */
 
-	u_char th_offx2;	/* data offset, rsvd */
+    u_char th_offx2;	/* data offset, rsvd */
 #define TH_OFF(th)	(((th)->th_offx2 & 0xf0) >> 4)
-	u_char th_flags;
+    u_char th_flags;
 #define TH_FIN 0x01
 #define TH_SYN 0x02
 #define TH_RST 0x04
@@ -106,9 +104,9 @@ struct sniff_tcp {
 #define TH_ECE 0x40
 #define TH_CWR 0x80
 #define TH_FLAGS (TH_FIN|TH_SYN|TH_RST|TH_ACK|TH_URG|TH_ECE|TH_CWR)
-	u_short th_win;		/* window */
-	u_short th_sum;		/* checksum */
-	u_short th_urp;		/* urgent pointer */
+    u_short th_win;		/* window */
+    u_short th_sum;		/* checksum */
+    u_short th_urp;		/* urgent pointer */
 };
 
 const struct sll_header *sllhdr;
@@ -122,7 +120,7 @@ u_int size_iphdr;
 u_int size_tcphdr;
 
 typedef struct statArgTag {
-	uint8_t		pktType;
+uint8_t pktType;
 } StatArg;
 
 typedef struct _MysqlPcap {
@@ -137,73 +135,72 @@ typedef struct _MysqlPcap {
     char        keyWord[256];
 } MysqlPcap;
 
-
-uint8_t		GoutputFlg = 0;
+uint8_t GoutputFlg = 0;
 
 void
 alog (int level, char *fmt, ...)
 {
-	char		levelStr[][32] = {"ERROR", "WARN", "INFO"};
-	char		head[128], body[10240],logname[128];
-	struct tm	tm;
-	time_t		t;
-	va_list		ap;
-	FILE		*fp;
-	
-	time(&t);
-	localtime_r(&t, &tm);
+    char levelStr[][32] = {"ERROR", "WARN", "INFO"};
+    char head[128], body[10240],logname[128];
+    struct tm tm;
+    time_t t;
+    va_list ap;
+    FILE *fp;
 
-	snprintf(head, sizeof(head),"%d:%02d:%02d %s", 
-		tm.tm_hour, tm.tm_min, tm.tm_sec, levelStr[level]);
-	va_start(ap, fmt);
-	vsnprintf(body, sizeof(body), fmt, ap);
-	va_end(ap);
-	
-	snprintf(logname, sizeof(logname), "/tmp/webdump-agent%d-%02d-%02d.log",
-		1900+tm.tm_year, tm.tm_mon+1, tm.tm_mday);
-	fp = fopen(logname, "a+");
-	if (NULL == fp) {
-		printf("[%s] %s\n\n", head, body);
-	} else {
-		fprintf(fp, "[%s] %s\n\n", head, body);
-		fclose(fp);
-	}
-	
-	return;
+    time(&t);
+    localtime_r(&t, &tm);
+
+    snprintf(head, sizeof(head),"%d:%02d:%02d %s", 
+        tm.tm_hour, tm.tm_min, tm.tm_sec, levelStr[level]);
+    va_start(ap, fmt);
+    vsnprintf(body, sizeof(body), fmt, ap);
+    va_end(ap);
+
+    snprintf(logname, sizeof(logname), "/tmp/webdump-agent%d-%02d-%02d.log",
+        1900+tm.tm_year, tm.tm_mon+1, tm.tm_mday);
+    fp = fopen(logname, "a+");
+    if (NULL == fp) {
+        printf("[%s] %s\n\n", head, body);
+    } else {
+        fprintf(fp, "[%s] %s\n\n", head, body);
+        fclose(fp);
+    }
+
+    return;
 }
 
 void 
 pkt_stat (MysqlPcap* mp, const struct pcap_pkthdr *h, const u_char *s) {
 
-	struct tm	*tm;
-	char		src_ip[16], dst_ip[16];
-	uint16_t	src_port, dst_port;
+    struct tm	*tm;
+    char		src_ip[16], dst_ip[16];
+    uint16_t	src_port, dst_port;
 
-	//use any device(bond?),  not ethernet, but sll protocol
-	//ethernet = (struct sniff_ethernet*)(s);
-	//sllhdr = (struct sll_header*)(s);
+    //use any device(bond?),  not ethernet, but sll protocol
+    //ethernet = (struct sniff_ethernet*)(s);
+    //sllhdr = (struct sll_header*)(s);
 
-	iphdr = (struct sniff_ip *)(s + SIZE_ETHERNET);
-	//iphdr = (struct sniff_ip *)(s + SLL_HDR_LEN);
-	size_iphdr = IP_HL(iphdr)*4;
-	if (size_iphdr < 20) {
-		alog(L_WARN, "   * Invalid IP header length: %u bytes", size_iphdr);
-		return;	
-	}
+    iphdr = (struct sniff_ip *)(s + SIZE_ETHERNET);
+    //iphdr = (struct sniff_ip *)(s + SLL_HDR_LEN);
+    size_iphdr = IP_HL(iphdr)*4;
+    if (size_iphdr < 20) {
+        alog(L_WARN, "   * Invalid IP header length: %u bytes", size_iphdr);
+        return;	
+    }
 
-	tcphdr = (struct sniff_tcp *)(s + SIZE_ETHERNET + size_iphdr);
-	//tcphdr = (struct sniff_tcp *)(s + SLL_HDR_LEN + size_iphdr);
-	size_tcphdr = TH_OFF(tcphdr)*4;
+    tcphdr = (struct sniff_tcp *)(s + SIZE_ETHERNET + size_iphdr);
+    //tcphdr = (struct sniff_tcp *)(s + SLL_HDR_LEN + size_iphdr);
+    size_tcphdr = TH_OFF(tcphdr)*4;
 
-	if (size_tcphdr < 20) {
-		alog(L_WARN, "   * Invalid TCP header length: %u bytes\n", size_tcphdr);
-		return;
-	}
+    if (size_tcphdr < 20) {
+        alog(L_WARN, "   * Invalid TCP header length: %u bytes\n", size_tcphdr);
+        return;
+    }
 
-	inet_ntop(AF_INET, (void *)&(iphdr->ip_src), src_ip, SIZE_IP);
-	inet_ntop(AF_INET, (void *)&(iphdr->ip_dst), dst_ip, SIZE_IP);
-	src_port = ntohs(tcphdr->th_sport);
-	dst_port = ntohs(tcphdr->th_dport);
+    inet_ntop(AF_INET, (void *)&(iphdr->ip_src), src_ip, SIZE_IP);
+    inet_ntop(AF_INET, (void *)&(iphdr->ip_dst), dst_ip, SIZE_IP);
+    src_port = ntohs(tcphdr->th_sport);
+    dst_port = ntohs(tcphdr->th_dport);
 
     char* payload = (char*)(s + SIZE_ETHERNET + size_iphdr + size_tcphdr);
     //char* payload = s + SLL_HDR_LEN + size_iphdr + size_tcphdr;
@@ -215,16 +212,16 @@ pkt_stat (MysqlPcap* mp, const struct pcap_pkthdr *h, const u_char *s) {
     int command = commandSql[0];
     commandSql[packet_length] = '\0';
 
-	printf("%ld - %ld [%d] %s\n\n", 
+    printf("%ld - %ld [%d] %s\n\n", 
         h->ts.tv_sec, h->ts.tv_usec, command, commandSql + 1);
 
-	return;
+    return;
 }
 
 int 
 set_filter (MysqlPcap *mp) {
 
-	struct bpf_program  fcode;
+    struct bpf_program  fcode;
     char filter[256];
 
     snprintf(filter, sizeof(filter), 
@@ -242,12 +239,12 @@ set_filter (MysqlPcap *mp) {
         return ERR;
     }
 
-	pcap_freecode(&fcode);
-	return OK;
+    pcap_freecode(&fcode);
+    return OK;
 }
 
 void switch_flg(int sig) {
-	if (SIGALRM == sig) GoutputFlg = 1;
+    if (SIGALRM == sig) GoutputFlg = 1;
 }
 
 int daemon_init(void) {
@@ -306,13 +303,13 @@ int single_process(char *process_name)
 void 
 sig_init(void)
 {
-	/*
+    /*
      *		block 
      *          SIGTERM SIGHUP SIGPIPE
      *
      *      handler
      *          SIGALRM
-	*/
+    */
     sigset_t intmask;
    
     sigemptyset(&intmask);                                                                                                
@@ -332,7 +329,7 @@ sig_init(void)
    
     sigaction(SIGPIPE, &act2, 0);
 
-	signal(SIGALRM, switch_flg);
+    signal(SIGALRM, switch_flg);
 }
 
 void 
@@ -344,21 +341,21 @@ init(MysqlPcap *mp) {
 int
 main (int argc, char **argv) {
 
-	char usage[] = "Usage:\n\tmysqlstat -p [port] mysql port default 3306\n"
+    char usage[] = "Usage:\n\tmysqlstat -p [port] mysql port default 3306\n"
                     "\t -d daemon default yes\n \t -f [filename] default tty\n"
                     "\t -i [dev]\n";
 
-	char ebuf[PCAP_ERRBUF_SIZE];
+    char ebuf[PCAP_ERRBUF_SIZE];
 
-	u_char *pkt_data = malloc(CAPLEN);
-	struct pcap_pkthdr *pcap_pkthdr = malloc(sizeof(struct pcap_pkthdr));
+    u_char *pkt_data = malloc(CAPLEN);
+    struct pcap_pkthdr *pcap_pkthdr = malloc(sizeof(struct pcap_pkthdr));
     MysqlPcap *mp = calloc(1, sizeof(*mp));
 
     if ((NULL == pcap_pkthdr) || (NULL == pkt_data) || (NULL == mp)) return ERR;
 
     init(mp);
 
-	char ch;
+    char ch;
     while (-1 != (ch = getopt(argc, argv, "p:df:k:i:"))) {
         switch (ch) {
             case 'p' :
@@ -382,47 +379,47 @@ main (int argc, char **argv) {
         }
     }
 
-	if (0 != single_process(argv[0])) return ERR; 
+    if (0 != single_process(argv[0])) return ERR; 
 
-	sig_init();
+    sig_init();
 
-	mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
+    mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
 
-	if (NULL == mp->pd) {
-		alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
+    if (NULL == mp->pd) {
+        alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
 
         snprintf(mp->netDev, sizeof(mp->netDev), "%s", "bond0");
-		mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
+        mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
 
-		if (NULL == mp->pd) {
+        if (NULL == mp->pd) {
             alog(L_ERROR, "pcap_open_live error: %s - %s\n", "bond0", ebuf);
-			printf("pcap_open_live error: %s - %s\n", "bond0", ebuf);
-			return ERR;
-		}
-	}
+            printf("pcap_open_live error: %s - %s\n", "bond0", ebuf);
+            return ERR;
+        }
+    }
 
-	if (pcap_lookupnet(mp->netDev, &mp->localnet, &mp->netmask, ebuf) < 0) {
+    if (pcap_lookupnet(mp->netDev, &mp->localnet, &mp->netmask, ebuf) < 0) {
         alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
-		printf("pcap_lookupnet error: %s", ebuf);
-		return ERR;
-	}
+        printf("pcap_lookupnet error: %s", ebuf);
+            return ERR;
+    }
 
     alog(L_INFO, "Listen Device is %s", mp->netDev);
 
     if (ERR == set_filter(mp)) return ERR;
 
-	for (;;) {
-		if (1 == pcap_next_ex(mp->pd, &pcap_pkthdr, (const u_char **)&pkt_data)) {
-			pkt_stat(mp, pcap_pkthdr, pkt_data);
-		}
-	}
+    for (;;) {
+        if (1 == pcap_next_ex(mp->pd, &pcap_pkthdr, (const u_char **)&pkt_data)) {
+            pkt_stat(mp, pcap_pkthdr, pkt_data);
+        }
+    }
 
-	pcap_close(mp->pd);
+    pcap_close(mp->pd);
     free(mp);
     free(pkt_data);
     free(pcap_pkthdr);
 
     alog(L_INFO, "why go here ?");
-	return OK;
+    return OK;
 }
 
