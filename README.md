@@ -51,10 +51,14 @@ lipcap
 	timestamp [commandType] sql
 
 
-##TODO
+#latency 
 
-###response_time
-	each sql latency 
+now we can watch sql latency, some code from tcprstat, and fix it's bug
+
+		[select * from d limit 10] latency is 131us
+		[select * from d limit 1] latency is 495us
+
+##TODO
 
 ###resultset
 	each sql result set
