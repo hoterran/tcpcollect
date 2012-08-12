@@ -18,6 +18,12 @@
 #include <errno.h>
 #include <string.h>
 
+#include "log.h"
+#include "mysqlpcap.h"
+#include "local-addresses.h"
+#include "process-packet.h"
+#include "stats-hash.h"
+
 typedef unsigned int uint;
 typedef unsigned int uint32;
 typedef unsigned char uchar;
@@ -27,9 +33,6 @@ typedef unsigned long ulong;
     (((uint32) ((uchar) (A)[1])) << 8) +\
     (((uint32) ((uchar) (A)[2])) << 16))
 
-#define OK      (0)
-#define ERR     (-1)
-#define PEND    (1)
 
 #define SIZE_IP         16
 #define SIZE_ETHERNET   14
@@ -41,9 +44,6 @@ typedef unsigned long ulong;
 
 #define OUTPUT_INTERVAL 300
 
-#define L_ERROR 0
-#define L_WARN  1
-#define L_INFO  2
 
 #define CAPLEN 65535
 
@@ -119,129 +119,7 @@ const char *payload;                    /* Packet payload */
 u_int size_iphdr;
 u_int size_tcphdr;
 
-typedef struct statArgTag {
-uint8_t pktType;
-} StatArg;
-
-typedef struct _MysqlPcap {
-    char        hostname[HOSTNAME_LEN];
-    pcap_t      *pd;
-    int         mysqlPort;
-    char        filter[10240];
-    char        netDev[10];
-    bpf_u_int32 netmask;
-    bpf_u_int32 localnet;
-    char        logfile[256];
-    char        keyWord[256];
-} MysqlPcap;
-
 uint8_t GoutputFlg = 0;
-
-void
-alog (int level, char *fmt, ...)
-{
-    char levelStr[][32] = {"ERROR", "WARN", "INFO"};
-    char head[128], body[10240],logname[128];
-    struct tm tm;
-    time_t t;
-    va_list ap;
-    FILE *fp;
-
-    time(&t);
-    localtime_r(&t, &tm);
-
-    snprintf(head, sizeof(head),"%d:%02d:%02d %s", 
-        tm.tm_hour, tm.tm_min, tm.tm_sec, levelStr[level]);
-    va_start(ap, fmt);
-    vsnprintf(body, sizeof(body), fmt, ap);
-    va_end(ap);
-
-    snprintf(logname, sizeof(logname), "/tmp/webdump-agent%d-%02d-%02d.log",
-        1900+tm.tm_year, tm.tm_mon+1, tm.tm_mday);
-    fp = fopen(logname, "a+");
-    if (NULL == fp) {
-        printf("[%s] %s\n\n", head, body);
-    } else {
-        fprintf(fp, "[%s] %s\n\n", head, body);
-        fclose(fp);
-    }
-
-    return;
-}
-
-void 
-pkt_stat (MysqlPcap* mp, const struct pcap_pkthdr *h, const u_char *s) {
-
-    struct tm	*tm;
-    char		src_ip[16], dst_ip[16];
-    uint16_t	src_port, dst_port;
-
-    //use any device(bond?),  not ethernet, but sll protocol
-    //ethernet = (struct sniff_ethernet*)(s);
-    //sllhdr = (struct sll_header*)(s);
-
-    iphdr = (struct sniff_ip *)(s + SIZE_ETHERNET);
-    //iphdr = (struct sniff_ip *)(s + SLL_HDR_LEN);
-    size_iphdr = IP_HL(iphdr)*4;
-    if (size_iphdr < 20) {
-        alog(L_WARN, "   * Invalid IP header length: %u bytes", size_iphdr);
-        return;	
-    }
-
-    tcphdr = (struct sniff_tcp *)(s + SIZE_ETHERNET + size_iphdr);
-    //tcphdr = (struct sniff_tcp *)(s + SLL_HDR_LEN + size_iphdr);
-    size_tcphdr = TH_OFF(tcphdr)*4;
-
-    if (size_tcphdr < 20) {
-        alog(L_WARN, "   * Invalid TCP header length: %u bytes\n", size_tcphdr);
-        return;
-    }
-
-    inet_ntop(AF_INET, (void *)&(iphdr->ip_src), src_ip, SIZE_IP);
-    inet_ntop(AF_INET, (void *)&(iphdr->ip_dst), dst_ip, SIZE_IP);
-    src_port = ntohs(tcphdr->th_sport);
-    dst_port = ntohs(tcphdr->th_dport);
-
-    char* payload = (char*)(s + SIZE_ETHERNET + size_iphdr + size_tcphdr);
-    //char* payload = s + SLL_HDR_LEN + size_iphdr + size_tcphdr;
-
-    /* start mysql protocol */
-    ulong packet_length = uint3korr(payload);
-
-    char *commandSql = payload + 4;
-    int command = commandSql[0];
-    commandSql[packet_length] = '\0';
-
-    printf("%ld - %ld [%d] %s\n\n", 
-        h->ts.tv_sec, h->ts.tv_usec, command, commandSql + 1);
-
-    return;
-}
-
-int 
-set_filter (MysqlPcap *mp) {
-
-    struct bpf_program  fcode;
-    char filter[256];
-
-    snprintf(filter, sizeof(filter), 
-        "dst port %d and tcp[tcpflags] & (tcp-push) != 0", mp->mysqlPort);
-
-    if (pcap_compile(mp->pd, &fcode, filter, 0, mp->netmask) < 0) {
-        alog(L_WARN, "pcap_compile failed: %s", pcap_geterr(mp->pd));
-        pcap_freecode(&fcode);
-        return ERR;
-    }
-
-    if (pcap_setfilter(mp->pd, &fcode) < 0) {
-        alog(L_WARN, "pcap_setfilter failed: %s", pcap_geterr(mp->pd));
-        pcap_freecode(&fcode);
-        return ERR;
-    }
-
-    pcap_freecode(&fcode);
-    return OK;
-}
 
 void switch_flg(int sig) {
     if (SIGALRM == sig) GoutputFlg = 1;
@@ -277,7 +155,8 @@ sig_pipe_handler(int sig) {
 
 int lock_fd;
 
-int single_process(char *process_name)
+int 
+single_process(char *process_name)
 {       
     char lockfile[128];
     
@@ -335,23 +214,23 @@ sig_init(void)
 void 
 init(MysqlPcap *mp) {
     mp->mysqlPort = 3306;
-    snprintf(mp->netDev, sizeof(mp->netDev), "%s", "eth0");
+    snprintf(mp->netDev, sizeof(mp->netDev), "%s", "any");
+    mp->al = get_addresses();
+    mp->hash = hash_new();
 }
 
 int
 main (int argc, char **argv) {
 
-    char usage[] = "Usage:\n\tmysqlstat -p [port] mysql port default 3306\n"
+    char usage[] = "Usage: \n\tmysqlstat -p [port] mysql port default 3306\n"
                     "\t -d daemon default yes\n \t -f [filename] default tty\n"
                     "\t -i [dev]\n";
 
     char ebuf[PCAP_ERRBUF_SIZE];
 
-    u_char *pkt_data = malloc(CAPLEN);
-    struct pcap_pkthdr *pcap_pkthdr = malloc(sizeof(struct pcap_pkthdr));
     MysqlPcap *mp = calloc(1, sizeof(*mp));
 
-    if ((NULL == pcap_pkthdr) || (NULL == pkt_data) || (NULL == mp)) return ERR;
+    if (NULL == mp) return ERR;
 
     init(mp);
 
@@ -373,8 +252,9 @@ main (int argc, char **argv) {
             case 'i' :
                 snprintf(mp->netDev, sizeof(mp->netDev), "%s", optarg); 
                 break; 
-            default:
-                printf("-%s", usage);
+            case 'h' :
+            default :
+                printf("%s", usage);
                 return ERR;
         }
     }
@@ -383,41 +263,9 @@ main (int argc, char **argv) {
 
     sig_init();
 
-    mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
+    start_packet(mp);
 
-    if (NULL == mp->pd) {
-        alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
-
-        snprintf(mp->netDev, sizeof(mp->netDev), "%s", "bond0");
-        mp->pd = pcap_open_live(mp->netDev, CAPLEN, 0, 0, ebuf);
-
-        if (NULL == mp->pd) {
-            alog(L_ERROR, "pcap_open_live error: %s - %s\n", "bond0", ebuf);
-            printf("pcap_open_live error: %s - %s\n", "bond0", ebuf);
-            return ERR;
-        }
-    }
-
-    if (pcap_lookupnet(mp->netDev, &mp->localnet, &mp->netmask, ebuf) < 0) {
-        alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
-        printf("pcap_lookupnet error: %s", ebuf);
-            return ERR;
-    }
-
-    alog(L_INFO, "Listen Device is %s", mp->netDev);
-
-    if (ERR == set_filter(mp)) return ERR;
-
-    for (;;) {
-        if (1 == pcap_next_ex(mp->pd, &pcap_pkthdr, (const u_char **)&pkt_data)) {
-            pkt_stat(mp, pcap_pkthdr, pkt_data);
-        }
-    }
-
-    pcap_close(mp->pd);
     free(mp);
-    free(pkt_data);
-    free(pcap_pkthdr);
 
     alog(L_INFO, "why go here ?");
     return OK;
