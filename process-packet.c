@@ -215,8 +215,11 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
             struct timeval tv2;
             char *sql;
+            char *data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
+            int num = parse_result(data, datalen);
+
             if (1 == hash_get(mp->hash, ip->ip_src, ip->ip_dst, lport, rport, &tv2, &sql))
-                printf("[%s] latency is %ldus\n", sql, (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec));
+                printf("[%s] latency is %ldus [%d]\n", sql, (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec), num);
         }
 
         break;
