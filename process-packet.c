@@ -31,6 +31,7 @@
 
 #include <pcap.h>
 #include <pcap/sll.h>
+#include <time.h>
 
 #include "log.h"
 #include "local-addresses.h"
@@ -92,6 +93,9 @@ start_packet(MysqlPcap *mp) {
 
     pcap_freecode(&fcode);
 
+    printf("%-20.20s%-40.40s%-16.16s%-16.16s\n", "timestamp", "sql", "latency(us)", "rows");
+    printf("%-20.20s%-40.40s%-16.16s%-16.16s\n", "---------", "---", "-----------", "---");
+
     pcap_loop(mp->pd, -1, process_packet, (u_char *)mp);
 
     alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
@@ -150,6 +154,7 @@ process_packet(unsigned char *user, const struct pcap_pkthdr *header,
 
 int
 process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
+
     char src[16], dst[16], *addr;
     int incoming;
     unsigned len;
@@ -205,25 +210,36 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             rport = sport;
           
             char *data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
-
             
             char *sql;
             int cmd = parse_sql(data, &sql, datalen);
             if (cmd >= 0)
                 hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, lport, rport, tv, sql, cmd);
-            
         }
         else {
             lport = sport;
             rport = dport;
 
             struct timeval tv2;
+            time_t tv_t;
+            struct tm *tm;
+            tv_t = tv.tv_sec;
+            tm = localtime(&tv_t);
+
+            char tt[16];
+
             char *sql;
             char *data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
             int num = parse_result(data, datalen);
 
             if (1 == hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, lport, rport, &tv2, &sql))
-                printf("[%s] latency is %ldus [%d]\n", sql, (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec), num);
+                snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
+                    tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
+
+                printf("%-20.20s%-40.40s%-16ld%-16d\n", tt,
+                    sql, 
+                    (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
+                    num);
         }
 
         break;

@@ -4,6 +4,7 @@ watch sql base libpcap
 
 
 ##dependency
+
 lipcap
 
 
@@ -11,20 +12,17 @@ lipcap
 
 	make
 
+
 ##use
 
 	sudo ./mysqlpcap
 
-	2012-8-9 21:27:1 [3] select 1
-
-	2012-8-9 21:27:3 [3] select * from d
-
-	2012-8-9 21:27:5 [3] SELECT DATABASE()
-
-	2012-8-9 21:27:5 [2] test
-
-	2012-8-9 21:27:6 [3] select * from d
-
+	timetamp           sql                                     latency(us)     rows            
+	---------           ---                                     -----------     ---             
+	21:59:12:619629     select * from d limit 199               109             199             
+	21:59:13:359634     select * from d limit 199               111             199             
+	21:59:13:931641     select * from d limit 199               112             199             
+	21:59:37:195648     select * from d limit 399               1324            399 
 
 ##parameter
 
@@ -45,21 +43,10 @@ lipcap
 ./mp -k order1 -p 3307 -f /tmp/mp.log -i eth1
 
 
-##output format:
-
-	timestamp [commandType] sql
-
-
-#latency 
-
-now we can watch sql latency, some code from tcprstat, and fix it's bug
-
-		[select * from d limit 10] latency is 131us
-		[select * from d limit 1] latency is 495us
-
 ##TODO
 
-###resultset
-	each sql result set
+* field_packet length length code binary
+* one resultset larger than one tcp packet
+
 
 

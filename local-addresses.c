@@ -54,14 +54,14 @@ get_addresses() {
 //        if (curr->flags & PCAP_IF_LOOPBACK)
  //           continue;
 
-        printf("%s-%s-%p-%d\n", curr->name, curr->description, 
-            curr->addresses, curr->flags);
+        //printf("%s-%s-%p-%d\n", curr->name, curr->description, 
+          //  curr->addresses, curr->flags);
 
         for (addr = curr->addresses; addr; addr = addr->next) {
             struct sockaddr *realaddr;
 
-            printf("\t %d %s \n", ((struct sockaddr_in *) addr->addr)->sin_addr.s_addr,
-                inet_ntoa(((struct sockaddr_in *)addr->addr)->sin_addr));
+            //printf("\t %d %s \n", ((struct sockaddr_in *) addr->addr)->sin_addr.s_addr,
+           //     inet_ntoa(((struct sockaddr_in *)addr->addr)->sin_addr));
 
             if (addr->addr)
                 realaddr = addr->addr;
