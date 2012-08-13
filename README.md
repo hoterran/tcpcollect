@@ -17,12 +17,7 @@ lipcap
 
 	sudo ./mysqlpcap
 
-	timetamp           sql                                     latency(us)     rows            
-	---------           ---                                     -----------     ---             
-	21:59:12:619629     select * from d limit 199               109             199             
-	21:59:13:359634     select * from d limit 199               111             199             
-	21:59:13:931641     select * from d limit 199               112             199             
-	21:59:37:195648     select * from d limit 399               1324            399 
+![use](https://raw.github.com/hoterran/tcpcollect/master/mysqlpcap.png)
 
 ##parameter
 
