@@ -9,12 +9,11 @@ lipcap
 
 ##compile
 
-	gcc -g -o mp mysqlrstat.c -lpap
-
+	make
 
 ##use
 
-	sudo ./mp
+	sudo ./mysqlpcap
 
 	2012-8-9 21:27:1 [3] select 1
 

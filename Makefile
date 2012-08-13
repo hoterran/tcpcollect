@@ -4,20 +4,21 @@ INSTALL=/usr/bin/install
 INSTALLDIR=/usr/local
 BINDIR=$(INSTALLDIR)/bin
 
-INCLUDE=-I/usr/local/include/hiredis
 COMPILE.c = $(CC) $(CFLAGS) $(INCLUDE) $(CPPFLAGS) $(TARGET_ARCH) -c
 LINK.o = $(CC) $(INCLUDE) $(LDFLAGS) $(TARGET_ARCH)
 LINK.c = $(CC) $(CFLAGS) $(INCLUDE) $(CPPFLAGS) $(LDFLAGS) $(TARGET_ARCH)
 VPATH=./
 
-TARGET=webdump-agent
+TARGET=mysqlpcap
 
-$(TARGET):$(TARGET).c /usr/local/lib/libhiredis.a /usr/local/lib/libpcap.a
+all:$(TARGET)
 
-install:$(TARGET)
-	mkdir -p $(BINDIR)
-	$(INSTALL) $(TARGET) $(BINDIR)
+mysqlpcap::LOADLIBES += -lpcap
+mysqlpcap: mysqlpcap.c stats-hash.o log.o process-packet.o mysql-protocol.o local-addresses.o
 
 clean:
 	- rm -f *.o $(TARGET)
 
+install:$(TARGET)
+	mkdir -p $(BINDIR)
+	$(INSTALL) $(TARGET) $(BINDIR)

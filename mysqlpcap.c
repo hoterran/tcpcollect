@@ -226,8 +226,6 @@ main (int argc, char **argv) {
                     "\t -d daemon default yes\n \t -f [filename] default tty\n"
                     "\t -i [dev]\n";
 
-    char ebuf[PCAP_ERRBUF_SIZE];
-
     MysqlPcap *mp = calloc(1, sizeof(*mp));
 
     if (NULL == mp) return ERR;

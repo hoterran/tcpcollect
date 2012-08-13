@@ -35,6 +35,8 @@
 #include "log.h"
 #include "local-addresses.h"
 #include "mysqlpcap.h"
+#include "mysql-protocol.h"
+#include "stats-hash.h"
 
 /*
     if dev has set, use it, else use 'any'
@@ -95,6 +97,8 @@ start_packet(MysqlPcap *mp) {
     alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
               
     pcap_close(mp->pd);
+
+    return OK;
 }
 
 void
@@ -206,7 +210,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             char *sql;
             int cmd = parse_sql(data, &sql, datalen);
             if (cmd >= 0)
-                hash_set(mp->hash, ip->ip_dst, ip->ip_src, lport, rport, tv, sql, cmd);
+                hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, lport, rport, tv, sql, cmd);
             
         }
         else {
@@ -218,7 +222,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             char *data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
             int num = parse_result(data, datalen);
 
-            if (1 == hash_get(mp->hash, ip->ip_src, ip->ip_dst, lport, rport, &tv2, &sql))
+            if (1 == hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, lport, rport, &tv2, &sql))
                 printf("[%s] latency is %ldus [%d]\n", sql, (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec), num);
         }
 

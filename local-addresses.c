@@ -60,8 +60,8 @@ get_addresses() {
         for (addr = curr->addresses; addr; addr = addr->next) {
             struct sockaddr *realaddr;
 
-            printf("\t %ld %s \n", ((struct sockaddr_in *) (addr->addr))->sin_addr,
-                inet_ntoa(((struct sockaddr_in *) (addr->addr))->sin_addr));
+            printf("\t %d %s \n", ((struct sockaddr_in *) addr->addr)->sin_addr.s_addr,
+                inet_ntoa(((struct sockaddr_in *)addr->addr)->sin_addr));
 
             if (addr->addr)
                 realaddr = addr->addr;
