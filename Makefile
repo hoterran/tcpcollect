@@ -9,16 +9,21 @@ LINK.o = $(CC) $(INCLUDE) $(LDFLAGS) $(TARGET_ARCH)
 LINK.c = $(CC) $(CFLAGS) $(INCLUDE) $(CPPFLAGS) $(LDFLAGS) $(TARGET_ARCH)
 VPATH=./
 
-TARGET=mysqlpcap
+TARGET=libpcap mysqlpcap 
 
-all:$(TARGET)
+all:$(TARGET) 
 
-mysqlpcap::LOADLIBES += -lpcap
+libpcap:dummy
+	@cd libpcap && ./configure && make
+
+mysqlpcap:LOADLIBES += libpcap/libpcap.a
 mysqlpcap: mysqlpcap.c stats-hash.o log.o process-packet.o mysql-protocol.o local-addresses.o
 
 clean:
-	- rm -f *.o $(TARGET)
+	- rm -f *.o mysqlpcap && cd libpcap && make clean
 
 install:$(TARGET)
 	mkdir -p $(BINDIR)
 	$(INSTALL) $(TARGET) $(BINDIR)
+
+dummy:
