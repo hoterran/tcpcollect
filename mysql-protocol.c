@@ -41,7 +41,7 @@ int parse_result(char* payload, int payload_len) {
     if (payload_len > 4) {
         int header_packet_length = uint3korr(payload);
        
-       if (header_packet_length + 4 < payload_len) {
+       if (header_packet_length + 4 <= payload_len) {
             uchar c = payload[4];
             if (c == 0) {
                 return ok_packet(payload, payload_len);
@@ -105,7 +105,10 @@ int resultset_packet(char *payload, int payload_len, int num) {
 }
 
 int ok_packet(char *payload, int payload_len) {
-    return -1;
+
+    /* TODO lcb*/
+    /* packet length has parsed, so skip*/
+    return payload[5];
 }
 
 int error_packet(char *payload, int payload_len) {
