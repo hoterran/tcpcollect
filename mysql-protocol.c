@@ -1,22 +1,30 @@
 #include <stdio.h>
+#include "mysql-protocol.h"
 
-typedef unsigned int uint;
-typedef unsigned int uint32;
-typedef unsigned char uchar;
-typedef unsigned long ulong;
+
+#define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
+    ((uint16) ((uchar) (A)[1]) << 8))
 
 #define uint3korr(A)    (uint32) (((uint32) ((uchar) (A)[0])) +\
-  (((uint32) ((uchar) (A)[1])) << 8) +\
-  (((uint32) ((uchar) (A)[2])) << 16))
+    (((uint32) ((uchar) (A)[1])) << 8) +\
+    (((uint32) ((uchar) (A)[2])) << 16))
 
-int error_packet(char *payload, int payload_len);
-int ok_packet(char *payload, int payload_len);
-int resultset_packet(char *payload, int payload_len, int num);
-int eof_packet(char* payload, int payload_len);
-int field_packet(char* payload, int payload_len, int field_number);
-int parse_result(char* payload, int payload_len);
+#define uint4korr(A)    (uint32) (((uint32) ((uchar) (A)[0])) +\
+    (((uint32) ((uchar) (A)[1])) << 8) +\
+    (((uint32) ((uchar) (A)[2])) << 16) +\
+    (((uint32) ((uchar) (A)[3])) << 24))
 
-int parse_sql(char* payload, char** sql, int payload_len) {
+ulong error_packet(char *payload, int payload_len);
+ulong ok_packet(char *payload, int payload_len);
+ulong resultset_packet(char *payload, int payload_len, ulong num);
+ulong eof_packet(char* payload, int payload_len);
+ulong field_packet(char* payload, int payload_len, ulong field_number);
+
+ulong net_field_length(char *packet);
+ulong lcb_length(char *packet);
+
+int 
+parse_sql(char* payload, char** sql, int payload_len) {
 
     /*3 1 1 sql */
     int packet_length = uint3korr(payload);
@@ -35,8 +43,10 @@ int parse_sql(char* payload, char** sql, int payload_len) {
  *  resultset
  *  if a complete resultset size larger than tcp packet will failure
  */
-int parse_result(char* payload, int payload_len) {
+ulong
+parse_result(char* payload, int payload_len) {
 
+    /* TODO it has complete mysql packets in this payload */
     /*header*/
     if (payload_len > 4) {
         int header_packet_length = uint3korr(payload);
@@ -49,16 +59,18 @@ int parse_result(char* payload, int payload_len) {
                 return error_packet(payload, payload_len); 
             } else {
                 /* resultset */
-                /* #TODO lcb */
-                int field_number = c;
-                return field_packet(payload + 4 + 1, payload_len - 4 - 1, field_number);
+                ulong field_number = net_field_length(payload + 4);
+                ulong field_lcb_length = lcb_length(payload + 4);
+                return field_packet(payload + 4 + field_lcb_length, 
+                    payload_len - 4 - field_lcb_length, field_number);
             }
        }
     } 
     return -1;
 }
 
-int field_packet(char* payload, int payload_len, int field_number) {
+ulong
+field_packet(char* payload, int payload_len, ulong field_number) {
 
     if (field_number == 0)
         return eof_packet(payload, payload_len);
@@ -75,7 +87,8 @@ int field_packet(char* payload, int payload_len, int field_number) {
     return -1;
 }
 
-int eof_packet(char* payload, int payload_len) {
+ulong
+eof_packet(char* payload, int payload_len) {
 
     if (payload_len > 4) {
         uchar c = payload[4]; 
@@ -86,7 +99,8 @@ int eof_packet(char* payload, int payload_len) {
     return -1;
 }
 
-int resultset_packet(char *payload, int payload_len, int num) {
+ulong
+resultset_packet(char *payload, int payload_len, ulong num) {
 
     if (payload_len > 4) {
         int resultset_packet_length = uint3korr(payload);
@@ -104,13 +118,59 @@ int resultset_packet(char *payload, int payload_len, int num) {
     return -1;
 }
 
-int ok_packet(char *payload, int payload_len) {
+ulong 
+ok_packet(char *payload, int payload_len) {
 
-    /* TODO lcb*/
     /* packet length has parsed, so skip*/
-    return payload[5];
+    /* TODO no conclude len, possible codedump */
+    return net_field_length(payload + 5);
 }
 
-int error_packet(char *payload, int payload_len) {
+ulong 
+error_packet(char *payload, int payload_len) {
     return -1;
 }
+
+
+ulong 
+net_field_length(char *packet) {
+
+    uchar *pos= (uchar *)packet;
+
+    if (*pos < 251) {
+        return *pos;
+    }
+    if (*pos == 251) {
+        return -1;
+    }
+    if (*pos == 252) {
+        return (ulong) uint2korr(pos+1);
+    }
+    if (*pos == 253) {
+        return (ulong) uint3korr(pos+1);
+    }
+    return (ulong) uint4korr(pos+1);
+}
+
+/* lcb length 1 3 4 9 */
+ulong 
+lcb_length(char *packet) {
+
+    uchar *pos= (uchar *)packet;
+
+    if (*pos < 251) {
+        return 1;
+    }
+    if (*pos == 251) {
+        (*packet)++;
+        return -1;
+    }
+    if (*pos == 252) {
+        return 3;
+    }
+    if (*pos == 253) {
+        return 4;
+    }
+    return 9;
+}
+

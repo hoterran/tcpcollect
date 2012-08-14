@@ -45,6 +45,7 @@
 
 */
 
+
 int
 start_packet(MysqlPcap *mp) {
 
@@ -230,13 +231,13 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
             char *sql;
             char *data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
-            int num = parse_result(data, datalen);
+            ulong num = parse_result(data, datalen);
 
             if (1 == hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, lport, rport, &tv2, &sql)) {
                 snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                     tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
-                printf("%-20.20s%-40.40s%-16ld%-16d\n", tt,
+                printf("%-20.20s%-40.40s%-16ld%-16ld\n", tt,
                     sql, 
                     (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
                     num);
