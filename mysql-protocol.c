@@ -1,6 +1,8 @@
 #include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 #include "mysql-protocol.h"
-
 
 #define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
     ((uint16) ((uchar) (A)[1]) << 8))
@@ -23,7 +25,11 @@ ulong field_packet(char* payload, int payload_len, ulong field_number);
 ulong net_field_length(char *packet);
 ulong lcb_length(char *packet);
 
-int 
+uchar *lastData;
+size_t lastDataSize;
+ulong lastNum;
+
+int
 parse_sql(char* payload, char** sql, int payload_len) {
 
     /*3 1 1 sql */
@@ -46,27 +52,46 @@ parse_sql(char* payload, char** sql, int payload_len) {
 ulong
 parse_result(char* payload, int payload_len) {
 
-    /* TODO it has complete mysql packets in this payload */
-    /*header*/
-    if (payload_len > 4) {
-        int header_packet_length = uint3korr(payload);
-       
-       if (header_packet_length + 4 <= payload_len) {
-            uchar c = payload[4];
-            if (c == 0) {
-                return ok_packet(payload, payload_len);
-            } else if (c == 0xff) {
-                return error_packet(payload, payload_len); 
-            } else {
-                /* resultset */
-                ulong field_number = net_field_length(payload + 4);
-                ulong field_lcb_length = lcb_length(payload + 4);
-                return field_packet(payload + 4 + field_lcb_length, 
-                    payload_len - 4 - field_lcb_length, field_number);
-            }
-       }
-    } 
-    return -1;
+    ulong ret;
+    uchar *newData = NULL;
+
+    if (lastData) {
+        //printf("here\n");
+        newData = malloc(payload_len + lastDataSize);
+        memcpy(newData, lastData, lastDataSize);
+        memcpy(newData + lastDataSize, payload, payload_len);
+        free(lastData);
+        lastData = NULL;
+
+        ret = resultset_packet(newData, payload_len + lastDataSize, lastNum);
+
+        free(newData); 
+        newData = NULL;
+
+        return ret;
+
+    } else {
+        /*header*/
+        if (payload_len > 4) {
+            int header_packet_length = uint3korr(payload);
+           
+           if (header_packet_length + 4 <= payload_len) {
+                uchar c = payload[4];
+                if (c == 0) {
+                    return ok_packet(payload, payload_len);
+                } else if (c == 0xff) {
+                    return error_packet(payload, payload_len); 
+                } else {
+                    /* resultset */
+                    ulong field_number = net_field_length(payload + 4);
+                    ulong field_lcb_length = lcb_length(payload + 4);
+                    return field_packet(payload + 4 + field_lcb_length, 
+                        payload_len - 4 - field_lcb_length, field_number);
+                }
+           }
+        } 
+        return -1;
+    }
 }
 
 ulong
@@ -104,18 +129,25 @@ resultset_packet(char *payload, int payload_len, ulong num) {
 
     if (payload_len > 4) {
         int resultset_packet_length = uint3korr(payload);
-        if (resultset_packet_length + 4 <= payload_len) {
+        if (resultset_packet_length + 4 < payload_len) {
+            /* resultset */
+            return resultset_packet(payload + 4 + resultset_packet_length,
+                payload_len - 4 - resultset_packet_length, num + 1);
+        } else if (resultset_packet_length + 4 == payload_len) {
             uchar c = payload[4];
-            if (c == 0xfe) {
-                return num; 
-            } else {
-                /* resultset */
-                return resultset_packet(payload + 4 + resultset_packet_length,
-                    payload_len - 4 - resultset_packet_length, num + 1);
-            }
+            if (c == 0xfe)
+                return num;
         }
     }
-    return -1;
+
+    // mysql packets larger than a tcp packet
+    // so need leave data next tcp packet
+    //printf("last data is %d %d\n", payload_len, num);
+    lastData = malloc(payload_len);
+    memcpy(lastData, payload, payload_len);
+    lastDataSize = payload_len;
+    lastNum = num;
+    return -2;
 }
 
 ulong 

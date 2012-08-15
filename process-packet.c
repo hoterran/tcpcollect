@@ -78,7 +78,7 @@ start_packet(MysqlPcap *mp) {
     //snprintf(filter, sizeof(filter), "tcp port %d ", mp->mysqlPort);
 
     snprintf(filter, sizeof(filter), 
-        "tcp port %d and tcp[tcpflags] & (tcp-push) != 0", mp->mysqlPort);
+        "tcp port %d and tcp[tcpflags] & (tcp-push|tcp-ack) != 0", mp->mysqlPort);
 
     if (pcap_compile(mp->pd, &fcode, filter, 0, mp->netmask) < 0) {
         alog(L_WARN, "pcap_compile failed: %s", pcap_geterr(mp->pd));
