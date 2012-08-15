@@ -2,7 +2,7 @@
 
 watch sql base libpcap
 
-我们经常的在 mysql 里不停的执行``show processlist``想了解最近执行的 sql 语句状况，可常常拿不到我们想要的结果。
+我们经常的在 MySQL 里不停的执行``show processlist``想了解最近执行的 sql 语句状况，可常常拿不到我们想要的结果。
 
 mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。它能够了解到经过某个 MySQL 实例的 sql 语句以及 sql 影响的行数，还有 sql 的响应时间。
 
@@ -22,16 +22,6 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 ##format
 
 	timestamp           sql                                     latency(us)     rows            
-	---------           ---                                     -----------     ---    
-
-1. timestamp MySQL服务器接收到 sql 的时间。
-2. sql
-3. latency(us) 响应时间，MySQL服务器返回结果集的时间与timestamp的差值。由于结果集可能分多个``tcp packet``发送过来。
-所以存在多条记录。
-4. 对于``select``语句则是结果集的行数，对于其它则是影响的行数。结果集超过一个``tcp packet``的大小，则行数显示在最后一个``tcp packet``对应的记录上。
-
-
-	timestamp           sql                                     latency(us)     rows            
 	---------           ---                                     -----------     ---             
 	9:22:33:815114      select 1                                291             1               
 	9:22:39:167115      select * from d limit 20000             229             -2              
@@ -43,9 +33,11 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 	9:22:45:227112      desc d                                  47891           3               
 	9:22:54:678621      insert into d values(1,2,3), (3,4,5)    33719           2    
 
-
-上面的例子，select * from d limit 20000 返回的结果集由 6 个``tcp packet``组成，所以有 6 行记录，前5行的 rows 为 -2
-，最后一行的 20000 才是真是的返回行数。 latency显示的每个tcp packet 的响应时间。
+1. timestamp MySQL服务器接收到 sql 的时间。
+2. sql
+3. latency(us) 响应时间，MySQL服务器返回结果集的时间与timestamp的差值。由于结果集可能分多个``tcp packet``发送过来。
+所以存在多条记录。
+4. 对于``select``语句则是结果集的行数，对于其它则是影响的行数。结果集超过一个``tcp packet``的大小，则行数显示在最后一个``tcp packet``对应的记录上。 上面的例子，select * from d limit 20000 返回的结果集由 6 个``tcp packet``组成，所以有 6 行记录，前5行的 rows 为 -2 ，最后一行的 20000 才是真是的返回行数。 latency显示的每个tcp packet 的响应时间。
 
 
 ##TODO
