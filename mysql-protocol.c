@@ -43,6 +43,7 @@ parse_sql(char* payload, char** sql, int payload_len) {
     }
     return -1;
 }
+
 /*
  *  ok
  *  error
@@ -162,7 +163,6 @@ ulong
 error_packet(char *payload, int payload_len) {
     return -1;
 }
-
 
 ulong 
 net_field_length(char *packet) {

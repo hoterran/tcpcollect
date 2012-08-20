@@ -40,7 +40,12 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 4. 对于``select``语句则是结果集的行数，对于其它则是影响的行数。结果集超过一个``tcp packet``的大小，则行数显示在最后一个``tcp packet``对应的记录上。 上面的例子，select * from d limit 20000 返回的结果集由 6 个``tcp packet``组成，所以有 6 行记录，前5行的 rows 为 -2 ，最后一行的 20000 才是真是的返回行数。 latency显示的每个tcp packet 的响应时间。
 
 
-##TODO
+## DOING 
+ * connect & close information
+ * sql' user
+
+## TODO
 * keyword filter
 * output threading
 * log
+
