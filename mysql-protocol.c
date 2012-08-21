@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "mysql-protocol.h"
 
 #define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
@@ -30,12 +31,30 @@ size_t lastDataSize;
 ulong lastNum;
 
 int
+is_sql(char *payload, int payload_len, char **user) {
+
+    /* 4 4 1 23[\0] n 8 1 n */
+    int packet_length = uint3korr(payload);
+
+    if (payload_len >= packet_length + 4) {
+        if (packet_length > 41) {
+            if ((payload[13] == '\0') && (payload[35] == '\0')) {
+                *user = payload + 36;
+                return 0; //is auth packet
+            }
+        }
+    }
+    return 1; //is sql packet
+}
+
+int
 parse_sql(char* payload, char** sql, int payload_len) {
 
     /*3 1 1 sql */
     int packet_length = uint3korr(payload);
     
     if (payload_len >= packet_length + 4) {
+        //TODO big sql, how to handle
         //mysql packet is complete
         payload[4 + packet_length] = '\0';
         *sql = &payload[5];
@@ -54,7 +73,7 @@ ulong
 parse_result(char* payload, int payload_len) {
 
     ulong ret;
-    uchar *newData = NULL;
+    char *newData = NULL;
 
     if (lastData) {
         //printf("here\n");

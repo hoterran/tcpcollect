@@ -27,11 +27,13 @@
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 
+#include <stdio.h>
 #include <string.h>
 
 #include <pcap.h>
 #include <pcap/sll.h>
 #include <time.h>
+#include <assert.h>
 
 #include "log.h"
 #include "local-addresses.h"
@@ -39,12 +41,14 @@
 #include "mysql-protocol.h"
 #include "stats-hash.h"
 
+#define likely(x)   __builtin_expect(!!(x), 1) 
+#define unlikely(x) __builtin_expect(!!(x), 0) 
+
 /*
     if dev has set, use it, else use 'any'
     if dev not exists use 'any'
 
 */
-
 
 int
 start_packet(MysqlPcap *mp) {
@@ -94,8 +98,8 @@ start_packet(MysqlPcap *mp) {
 
     pcap_freecode(&fcode);
 
-    printf("%-20.20s%-40.40s%-16.16s%-16.16s\n", "timestamp", "sql", "latency(us)", "rows");
-    printf("%-20.20s%-40.40s%-16.16s%-16.16s\n", "---------", "---", "-----------", "---");
+    printf("%-20.20s%-70.70s%-16.16s%-16.16s%-10.10s\n", "timestamp", "sql", "latency(us)", "rows", "user");
+    printf("%-20.20s%-70.70s%-16.16s%-16.16s%-10.10s\n", "---------", "---", "-----------", "---", "----");
 
     pcap_loop(mp->pd, -1, process_packet, (u_char *)mp);
 
@@ -199,6 +203,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         if (datalen == 0)
             break;
 
+        // for loopback, dst & src are all local_address
         if (ip->ip_dst.s_addr == ip->ip_src.s_addr) { 
             if (dport == mp->mysqlPort) {
                 incoming = 1; 
@@ -206,16 +211,44 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 incoming = 0;
         }
 
+        /* cmd packet & auth packet */
+
+        /* internal 
+         * receive auth, insert state = 1 (incoming = 1)
+         * if state = 1 after ok packet state = 2, if error packet, remove entry (incoming = 0)
+         * if state = 2 can go cmd and resultset packet
+         * if state = 2 can fin, remove entry
+         */
+
+        char *sql, *user, *data;
+        int cmd = -1;
+
+        data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
+
         if (incoming) {
             lport = dport;
             rport = sport;
-          
-            char *data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
-            
-            char *sql;
-            int cmd = parse_sql(data, &sql, datalen);
-            if (cmd >= 0)
-                hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, lport, rport, tv, sql, cmd);
+           
+            if (likely(is_sql(data, datalen, &user))) {
+                cmd = parse_sql(data, &sql, datalen);
+                // sql packet 
+
+                if (unlikely(cmd == 1)) {
+                    hash_get_rem(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                        lport, rport, NULL, NULL, NULL);
+                    // printf("quit packet %s %d\n", sql, cmd);
+                } else if (likely(cmd >= 0)) {
+                    hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                        lport, rport, tv, sql, cmd, NULL, 0);
+                    // printf("sql packet %s %d\n", sql, cmd);
+                } else 
+                    assert(NULL);
+            } else {
+                // auth packet
+                hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                    lport, rport, tv, sql, cmd, user, AfterAuthPacket);
+                //printf("auth packet %s\n", user);
+            }
         }
         else {
             lport = sport;
@@ -229,18 +262,33 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
             char tt[16];
 
-            char *sql;
-            char *data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
-            ulong num = parse_result(data, datalen);
+            int num = parse_result(data, datalen);
+            int status = hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr,
+                lport, rport, &tv2, &sql, &user);
 
-            if (1 == hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, lport, rport, &tv2, &sql)) {
+            if (likely(AfterOkPacket == status)) {
+                // resultset
                 snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                     tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
-                printf("%-20.20s%-40.40s%-16ld%-16ld\n", tt,
+                printf("%-20.20s%-70.70s%-16ld%-16d%-10.10s\n", tt,
                     sql, 
                     (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
-                    num);
+                    num, user);
+            } else if (0 == status) {
+                    //printf("handshake packet \n");
+            } else {
+                if (unlikely(num == -1)) {
+                    // auth error packet
+                    // printf("error packet \n");
+                    hash_get_rem(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
+                        lport, rport, NULL, NULL, NULL);
+                } else {
+                    // auth ok packet
+                    // printf("ok packet \n");
+                    hash_set(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
+                        lport, rport, tv, sql, cmd, NULL, AfterOkPacket);
+                }
             }
         }
 
@@ -254,5 +302,4 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
     return 0;
     
 }
-
 

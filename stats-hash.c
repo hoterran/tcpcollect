@@ -26,8 +26,12 @@
 #include <sys/time.h>
 #include <string.h>
 
+#include "stats-hash.h"
+
 #define INITIAL_HASH_SZ     2053
 #define MAX_LOAD_PERCENT    65
+
+/* 1: receive auth packet 2: recieve ok packet start work */
 
 struct session {
     uint32_t laddr, raddr;
@@ -36,7 +40,9 @@ struct session {
     struct timeval tv;
 
     char *sql;
+    char *user;
     int cmd;
+    enum SessionStatus status; 
     
     struct session *next;
     
@@ -53,7 +59,7 @@ static unsigned long
     hash_fun(uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport);
 static int hash_set_internal(struct session *sessions, unsigned long sz,
         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-        struct timeval tv, char *sql, int cmd);
+        struct timeval tv, char *sql, int cmd, char *user, enum SessionStatus status);
 static int hash_load_check(struct hash *hash);
 static unsigned long hash_newsz(unsigned long sz);
     
@@ -85,13 +91,12 @@ void
 hash_del(struct hash *hash) {
     free(hash->sessions);
     free(hash);
-    
 }
 
 int
 hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result, char **sql)
+         struct timeval *result, char **sql, char **user)
 {
     struct session *session;
     unsigned long port;
@@ -107,18 +112,17 @@ hash_get(struct hash *hash,
         {
             *result = session->next->tv;
             *sql = session->next->sql;
-            return 1;
-            
+            *user = session->next->user;
+            return session->next->status;
         }
         
     return 0;
-    
 }
 
 int
 hash_get_rem(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result)
+         struct timeval *result, char **sql, char **user)
 {
     struct session *session, *next;
     unsigned long port;
@@ -130,35 +134,34 @@ hash_get_rem(struct hash *hash,
             session->next->laddr == laddr &&
             session->next->rport == rport &&
             session->next->lport == lport
-        )
-        {
-            *result = session->next->tv;
-            
+        ) {
+            // *result = session->next->tv;
             // Now remove
             next = session->next->next;
+            if (session->next->sql)
+                free(session->next->sql);
+            if (session->next->user)
+                free(session->next->user);
             free(session->next);
             session->next = next;
             
             hash->count --;
             
             return 1;
-            
         }
         
     return 0;
-    
-
 }
 
 int
 hash_set(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char *sql, int cmd)
+         struct timeval value, char *sql, int cmd, char *user, enum SessionStatus status)
 {
     hash_load_check(hash);
     
     if (hash_set_internal(hash->sessions, hash->sz,
-                             laddr, raddr, lport, rport, value, sql, cmd))
+                             laddr, raddr, lport, rport, value, sql, cmd, user, status))
     {
         hash->count ++;
         return 1;
@@ -203,33 +206,43 @@ hash_clean(struct hash *hash, unsigned long min) {
 static int
 hash_set_internal(struct session *sessions, unsigned long sz,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char* sql, int cmd)
+         struct timeval value, char* sql, int cmd, char *user, enum SessionStatus status)
 {
     struct session *session;
     unsigned long port;
     
     port = hash_fun(laddr, raddr, lport, rport) % sz;
 
-    for (session = sessions + port; session->next; session = session->next)
+    for (session = sessions + port; session->next; session = session->next) {
         if (
             session->next->raddr == raddr &&
             session->next->laddr == laddr &&
             session->next->rport == rport &&
             session->next->lport == lport
-        )
-        {
+        ) {
             session->next->tv = value;
             if (session->next->sql) 
                 free(session->next->sql);
             session->next->sql = malloc(strlen(sql) + 1);
             snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
             session->next->cmd = cmd;
+
+            if (user) {
+                if (session->next->user) {
+                    free(session->next->user);
+                }
+                session->next->user = malloc(strlen(user) + 1);
+                snprintf(session->next->user, strlen(user) + 1, "%s", user);
+            }
+            if (status)
+                session->next->status = status;
             
             return 0;
-            
         }
+    }
     
     session->next = malloc(sizeof(struct session));
+    memset(session->next, 0, sizeof(struct session));
     if (!session->next)
         abort();
     
@@ -243,10 +256,20 @@ hash_set_internal(struct session *sessions, unsigned long sz,
     snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
     session->next->cmd = cmd;
     
+    if (user) {
+        if (session->next->user) {
+            free(session->next->user);
+        }
+        session->next->user = malloc(strlen(user) + 1);
+        snprintf(session->next->user, strlen(user) + 1, "%s", user);
+    }
+
+    if (status)
+        session->next->status = status;
+
     session->next->next = NULL;
     
     return 1;
-    
 }
 
 static int
@@ -274,7 +297,7 @@ hash_load_check(struct hash *hash) {
                 
                 hash_set_internal(new_sessions, nsz, session->laddr,
                         session->raddr, session->lport, session->rport,
-                        session->tv, session->sql, session->cmd);
+                        session->tv, session->sql, session->cmd, session->user, session->status);
                         
             }
             
@@ -291,7 +314,6 @@ hash_load_check(struct hash *hash) {
     }
     
     return 0;
-    
 }
 
 static unsigned long
@@ -302,12 +324,9 @@ hash_fun(uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport) {
     ret ^= (lport << 16) | rport;
 
     return ret;
-
-    
 }
 
 static unsigned long
 hash_newsz(unsigned long sz) {
     return sz * 2 + 1;
-    
 }
