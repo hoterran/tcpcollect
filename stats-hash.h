@@ -39,5 +39,7 @@ int hash_set(struct hash *hash,
          struct timeval value, char* sql, int cmd, char *user, enum SessionStatus status);
          
 int hash_clean(struct hash *hash, unsigned long min);
+
+int hash_print(struct hash *hash);
          
 #endif

@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "stats-hash.h"
+#include "log.h"
 
 #define INITIAL_HASH_SZ     2053
 #define MAX_LOAD_PERCENT    65
@@ -329,4 +330,19 @@ hash_fun(uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport) {
 static unsigned long
 hash_newsz(unsigned long sz) {
     return sz * 2 + 1;
+}
+
+int
+hash_print(struct hash *hash) {
+    unsigned long i;
+ 
+    for (i = 0; i < hash->sz; i ++) {
+        struct session *session;
+       
+        for (session = hash->sessions + i; session->next; session = session->next) {
+            dump(L_OK, "[%ld][%s]%s-", i, session->next->user, session->next->sql);
+        }
+    }
+    
+    return 0;
 }

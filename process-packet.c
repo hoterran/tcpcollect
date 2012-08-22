@@ -60,24 +60,23 @@ start_packet(MysqlPcap *mp) {
     mp->pd = pcap_open_live(mp->netDev, CAP_LEN, 0, 0, ebuf);
               
     if (NULL == mp->pd) {
-        alog(L_WARN, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
+        dump(L_WARN, "pcap_open_live warn: %s - %s", mp->netDev, ebuf);
               
         snprintf(mp->netDev, sizeof(mp->netDev), "%s", "any");
         mp->pd = pcap_open_live(mp->netDev, CAP_LEN, 0, 0, ebuf);
               
         if (NULL == mp->pd) {
-            alog(L_ERROR, "pcap_open_live error: %s - %s\n", "any", ebuf);
-            printf("pcap_open_live error: %s - %s\n", "any", ebuf);
+            dump(L_ERR, "pcap_open_live error: %s - %s", "any", ebuf);
             return ERR;
         }
     }
               
     if (pcap_lookupnet(mp->netDev, &mp->localnet, &mp->netmask, ebuf) < 0) {
-        alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
+        dump(L_ERR, "pcap_open_live error: %s - %s", mp->netDev, ebuf);
         return ERR;
     }         
               
-    alog(L_OK, "Listen Device is %s", mp->netDev);
+    dump(L_OK, "Listen Device is %s", mp->netDev);
 
     //snprintf(filter, sizeof(filter), "tcp port %d ", mp->mysqlPort);
 
@@ -85,25 +84,25 @@ start_packet(MysqlPcap *mp) {
         "tcp port %d and tcp[tcpflags] & (tcp-push|tcp-ack) != 0", mp->mysqlPort);
 
     if (pcap_compile(mp->pd, &fcode, filter, 0, mp->netmask) < 0) {
-        alog(L_WARN, "pcap_compile failed: %s", pcap_geterr(mp->pd));
+        dump(L_ERR, "pcap_compile failed: %s", pcap_geterr(mp->pd));
         pcap_freecode(&fcode);
         return ERR;
     }
 
     if (pcap_setfilter(mp->pd, &fcode) < 0) {
-        alog(L_WARN, "pcap_setfilter failed: %s", pcap_geterr(mp->pd));
+        dump(L_ERR, "pcap_setfilter failed: %s", pcap_geterr(mp->pd));
         pcap_freecode(&fcode);
         return ERR;
     }
 
     pcap_freecode(&fcode);
 
-    printf("%-20.20s%-70.70s%-16.16s%-16.16s%-10.10s\n", "timestamp", "sql", "latency(us)", "rows", "user");
-    printf("%-20.20s%-70.70s%-16.16s%-16.16s%-10.10s\n", "---------", "---", "-----------", "---", "----");
+    dump(L_OK, "%-20.20s%-60.60s%-16.16s%-10.10s%-10.10s", "timestamp", "sql", "latency(us)", "rows", "user");
+    dump(L_OK, "%-20.20s%-60.60s%-16.16s%-10.10s%-10.10s", "---------", "---", "-----------", "---", "----");
 
     pcap_loop(mp->pd, -1, process_packet, (u_char *)mp);
 
-    alog(L_ERROR, "pcap_open_live error: %s - %s\n", mp->netDev, ebuf);
+    dump(L_ERR, "pcap_open_live error: %s - %s", mp->netDev, ebuf);
               
     pcap_close(mp->pd);
 
@@ -154,7 +153,6 @@ process_packet(unsigned char *user, const struct pcap_pkthdr *header,
         return;
     
     process_ip(mp, ip, header->ts);
-    
 }
 
 int
@@ -235,18 +233,18 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 if (unlikely(cmd == 1)) {
                     hash_get_rem(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                         lport, rport, NULL, NULL, NULL);
-                    // printf("quit packet %s %d\n", sql, cmd);
+                    dump(L_DEBUG, "quit packet %s %d", sql, cmd);
                 } else if (likely(cmd >= 0)) {
                     hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                         lport, rport, tv, sql, cmd, NULL, AfterOkPacket);
-                    // printf("sql packet %s %d\n", sql, cmd);
+                    dump(L_DEBUG, "sql packet %s %d", sql, cmd);
                 } else 
                     assert(NULL);
             } else {
                 // auth packet
                 hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                     lport, rport, tv, sql, cmd, user, AfterAuthPacket);
-                //printf("auth packet %s\n", user);
+                dump(L_DEBUG, "auth packet %s", user);
             }
         }
         else {
@@ -270,21 +268,22 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                     tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
-                printf("%-20.20s%-70.70s%-16ld%-16d%-10.10s\n", tt,
+                dump(L_OK, "%-20.20s%-60.60s%-16ld%-10d%-10.10s", tt,
                     sql, 
                     (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
                     num, user);
+                //hash_print(mp->hash); 
             } else if (0 == status) {
-                    //printf("handshake packet \n");
+                    dump(L_DEBUG, "handshake packet ");
             } else {
                 if (unlikely(num == -1)) {
                     // auth error packet
-                    // printf("error packet \n");
+                    dump(L_DEBUG, "error packet ");
                     hash_get_rem(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
                         lport, rport, NULL, NULL, NULL);
                 } else {
                     // auth ok packet
-                    // printf("ok packet \n");
+                    dump(L_DEBUG, "ok packet ");
                     hash_set(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
                         lport, rport, tv, sql, cmd, NULL, AfterOkPacket);
                 }
