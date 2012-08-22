@@ -232,14 +232,13 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             if (likely(is_sql(data, datalen, &user))) {
                 cmd = parse_sql(data, &sql, datalen);
                 // sql packet 
-
                 if (unlikely(cmd == 1)) {
                     hash_get_rem(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                         lport, rport, NULL, NULL, NULL);
                     // printf("quit packet %s %d\n", sql, cmd);
                 } else if (likely(cmd >= 0)) {
                     hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
-                        lport, rport, tv, sql, cmd, NULL, 0);
+                        lport, rport, tv, sql, cmd, NULL, AfterOkPacket);
                     // printf("sql packet %s %d\n", sql, cmd);
                 } else 
                     assert(NULL);
