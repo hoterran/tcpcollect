@@ -1,2 +1,4 @@
-# libpcap product
-libpcap-1.1.1
+*.log
+*.swp
+*/*.log
+*/*.swp
