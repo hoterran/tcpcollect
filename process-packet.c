@@ -44,6 +44,9 @@
 #define likely(x)   __builtin_expect(!!(x), 1) 
 #define unlikely(x) __builtin_expect(!!(x), 0) 
 
+
+#define VALUE_SIZE 1024
+
 /*
     if dev has set, use it, else use 'any'
     if dev not exists use 'any'
@@ -97,8 +100,8 @@ start_packet(MysqlPcap *mp) {
 
     pcap_freecode(&fcode);
 
-    dump(L_OK, "%-20.20s%-60.60s%-16.16s%-10.10s%-10.10s", "timestamp", "sql", "latency(us)", "rows", "user");
-    dump(L_OK, "%-20.20s%-60.60s%-16.16s%-10.10s%-10.10s", "---------", "---", "-----------", "---", "----");
+    dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "timestamp", "latency(us)", "rows", "user", "sql");
+    dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "---------", "-----------", "----", "----", "---");
 
     pcap_loop(mp->pd, -1, process_packet, (u_char *)mp);
 
@@ -123,7 +126,7 @@ process_packet(unsigned char *user, const struct pcap_pkthdr *header,
     // Parse packet
     switch (pcap_datalink(mp->pd)) {
         
-    case DLT_LINUX_SLL:
+    case DLT_LINUX_SLL: // any come here
         sll = (struct sll_header *) packet;
         packet_type = ntohs(sll->sll_protocol);
         ip = (const struct ip *) (packet + sizeof(struct sll_header));
@@ -218,6 +221,25 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
          * if state = 2 can fin, remove entry
          */
 
+        /*
+            Client                                      Server
+            ==========================================================
+                                                        handshake
+            auth        AfterAuthPacket 
+                        AfterOkPacket                   auth ok| error         
+
+            sql         AfterSqlPacket 
+                        AfterResultPacket               resultset              
+
+            prepare     AfterPreparePacket      
+                        AfterPrepareOkPacket            prepare-ok             
+
+            execute     AfterSqlPacket
+                        AfterResultPacket               resultset               
+
+            stmt_close
+
+        */
         char *sql, *user, *data;
         int cmd = -1;
 
@@ -228,26 +250,75 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             rport = sport;
            
             if (likely(is_sql(data, datalen, &user))) {
+                /* COM_ packet */
                 cmd = parse_sql(data, &sql, datalen);
-                // sql packet 
-                if (unlikely(cmd == 1)) {
+
+                if (unlikely(cmd == COM_QUIT)) {
+
+                    dump(L_DEBUG, "quit packet %s %d", sql, cmd);
                     hash_get_rem(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                         lport, rport, NULL, NULL, NULL);
-                    dump(L_DEBUG, "quit packet %s %d", sql, cmd);
-                } else if (likely(cmd >= 0)) {
+
+                } else if (unlikely(cmd == COM_STMT_PREPARE)) {
+
+                    dump(L_DEBUG, "prepare packet %s %d", sql, cmd);
+
                     hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
-                        lport, rport, tv, sql, cmd, NULL, AfterOkPacket);
+                        lport, rport, tv, sql, cmd, NULL, AfterPreparePacket);
+
+                } else if (unlikely(cmd == COM_STMT_CLOSE)) {
+
+                    /* close param_type, param */
+                    dump(L_DEBUG, "stmt close packet %s %d", sql, cmd);
+                    hash_get_rem(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                        lport, rport, NULL, NULL, NULL);
+
+                } else if (unlikely(cmd == COM_STMT_EXECUTE)) {
+
+                    int stmt_id;
+                    char *param_type = NULL;
+                    uchar param[VALUE_SIZE];
+                    param[0] = '\0';
+                    char insert_param_type = 0;
+                    int param_count;
+
+                    /* stmt_id */
+                    parse_stmt_id(data, datalen, &stmt_id);
+
+                    /* param_count, param_type(possible) */
+                    hash_get_param_count(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                        lport, rport, stmt_id, &param_count, &param_type);
+
+                    assert(param_count > 0);
+
+                    /* param_type in payload */
+                    if (param_type == NULL)
+                        insert_param_type = 1;
+
+                    insert_param_type = parse_param(data, datalen, param_count, &param_type, &param[0]);
+
+                    assert(param_type);
+
+                    dump(L_DEBUG, "execute packet %s %d", sql, cmd);
+
+                    hash_set_param(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                        lport, rport, tv, stmt_id, param, insert_param_type ? param_type:NULL, param_count);
+
+                } else if (likely(cmd >= 0)) {
+
                     dump(L_DEBUG, "sql packet %s %d", sql, cmd);
+                    hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                        lport, rport, tv, sql, cmd, NULL, AfterSqlPacket);
+
                 } else 
                     assert(NULL);
             } else {
-                // auth packet
+                /* auth packet */
                 hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
-                    lport, rport, tv, sql, cmd, user, AfterAuthPacket);
+                    lport, rport, tv, NULL, cmd, user, AfterAuthPacket);
                 dump(L_DEBUG, "auth packet %s", user);
             }
-        }
-        else {
+        } else {
             lport = sport;
             rport = dport;
 
@@ -258,24 +329,39 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             tm = localtime(&tv_t);
 
             char tt[16];
+            char *value = NULL;
 
             int num = parse_result(data, datalen);
             int status = hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr,
-                lport, rport, &tv2, &sql, &user);
+                lport, rport, &tv2, &sql, &user, &value);
 
-            if (likely(AfterOkPacket == status)) {
+            if (likely(AfterSqlPacket == status)) {
+
                 // resultset
-                snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
-                    tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
+                if (value) {
+                    // prepare-statement
+                    snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
+                        tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
-                dump(L_OK, "%-20.20s%-60.60s%-16ld%-10d%-10.10s", tt,
-                    sql, 
-                    (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
-                    num, user);
+                    //printf("%s-%s\n", sql, value);
+                    dump(L_OK, "%-20.20s%-16ld%-10ld%-10.10s %s [%s]", tt,
+                        (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
+                        num, user,
+                        sql, value);
+                } else {
+                    // normal statement
+                    snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
+                        tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
+
+                    dump(L_OK, "%-20.20s%-16d%-10ld%-10.10s %s", tt,
+                        (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
+                        num, user,
+                        sql);
+                }
                 //hash_print(mp->hash); 
             } else if (0 == status) {
                     dump(L_DEBUG, "handshake packet ");
-            } else {
+            } else if (AfterAuthPacket == status) {
                 if (unlikely(num == -1)) {
                     // auth error packet
                     dump(L_DEBUG, "error packet ");
@@ -285,8 +371,17 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                     // auth ok packet
                     dump(L_DEBUG, "ok packet ");
                     hash_set(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
-                        lport, rport, tv, sql, cmd, NULL, AfterOkPacket);
+                        lport, rport, tv, NULL, cmd, NULL, AfterOkPacket);
                 }
+            } else if (AfterPreparePacket == status) {
+                    dump(L_DEBUG, "prepare ok packet ");
+
+                    int stmt_id;
+                    short param_count;
+                    parse_prepare_ok(data, datalen, &stmt_id, &param_count);
+
+                    hash_set_param_count(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
+                        lport, rport, stmt_id, param_count);
             }
         }
 
@@ -294,10 +389,8 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         
     default:
         break;
-        
     }
     
     return 0;
-    
 }
 

@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <string.h>
+#include <assert.h>
 
 #include "stats-hash.h"
 #include "log.h"
@@ -46,7 +47,15 @@ struct session {
     enum SessionStatus status; 
     
     struct session *next;
-    
+
+//    char is_stmt;
+    int stmt_id;
+    int param_count;
+
+    /* each param count 2 bytes */
+    void *param_type;
+
+    char *param;
 };
 
 struct hash {
@@ -97,7 +106,7 @@ hash_del(struct hash *hash) {
 int
 hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result, char **sql, char **user)
+         struct timeval *result, char **sql, char **user, char **value)
 {
     struct session *session;
     unsigned long port;
@@ -114,6 +123,7 @@ hash_get(struct hash *hash,
             *result = session->next->tv;
             *sql = session->next->sql;
             *user = session->next->user;
+            *value = session->next->param;
             return session->next->status;
         }
         
@@ -143,6 +153,11 @@ hash_get_rem(struct hash *hash,
                 free(session->next->sql);
             if (session->next->user)
                 free(session->next->user);
+            if (session->next->param)
+                free(session->next->param);
+            if (session->next->param_type)
+                free(session->next->param_type);
+
             free(session->next);
             session->next = next;
             
@@ -204,6 +219,141 @@ hash_clean(struct hash *hash, unsigned long min) {
     
 }
 
+/* save stmt_id, param_count */
+int 
+hash_get_param_count(struct hash *hash, 
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+         int stmt_id, int *param_count, char **param_type) {
+
+    struct session *session;
+    unsigned long port;
+    
+    port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
+
+    assert(param_count > 0);
+    assert(stmt_id > 0);
+
+    for (session = hash->sessions + port; session->next; session = session->next) {
+        if (
+            session->next->raddr == raddr &&
+            session->next->laddr == laddr &&
+            session->next->rport == rport &&
+            session->next->lport == lport
+        ) {
+
+            *param_count = session->next->param_count;
+            *param_type = session->next->param_type;
+
+            return 0;
+        }
+    }
+    return -1;
+}
+
+/* save stmt_id, param_count */
+int 
+hash_set_param_count(struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+         int stmt_id, int param_count) {
+
+    struct session *session;
+    unsigned long port;
+    
+    port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
+
+    assert(param_count > 0);
+    assert(stmt_id > 0);
+
+    for (session = hash->sessions + port; session->next; session = session->next) {
+        if (
+            session->next->raddr == raddr &&
+            session->next->laddr == laddr &&
+            session->next->rport == rport &&
+            session->next->lport == lport
+        ) {
+
+//            ASSERT(session->next->is_stmt);
+            session->next->stmt_id = stmt_id;
+
+            if (session->next->param_count == param_count) 
+                return 0;
+            else {
+                //assert(session->next->param_type);
+                //free(session->next->param_type);
+                if (session->next->param_type)
+                    free(session->next->param_type);
+
+                session->next->param_type = malloc(2 * param_count);
+                session->next->param_count = param_count;
+            }
+            
+            return 0;
+        }
+    }
+    return -1;
+}
+
+/* save param, param_type (possible) */
+int 
+hash_set_param (struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport, struct timeval tv, int stmt_id,
+          char *param, char *param_type, int param_count) {
+
+    struct session *session;
+    unsigned long port;
+    
+    port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
+
+    assert(param > 0);
+
+    for (session = hash->sessions + port; session->next; session = session->next) {
+        if (
+            session->next->raddr == raddr &&
+            session->next->laddr == laddr &&
+            session->next->rport == rport &&
+            session->next->lport == lport
+        ) {
+
+//            ASSERT(session->next->is_stmt);
+            assert(session->next->stmt_id = stmt_id);
+            assert(param_count);
+
+            session->next->tv = tv;
+
+            /* copy param_type */
+
+            assert(session->next->param_count == param_count);
+
+            if (param_type) {
+                memcpy(session->next->param_type, param_type, 2 * param_count);
+            }
+
+            assert(param);
+            assert(strlen(param));
+
+            int len = 0;
+            if (NULL == session->next->param) {
+                len = 0; 
+            } else {
+                len = strlen(session->next->param); 
+            }
+
+            /* copy param */
+            if (strlen(param) > len) {
+                if (session->next->param)
+                    free(session->next->param);
+                session->next->param = malloc(strlen(param) + 1);
+            }
+            snprintf(session->next->param, strlen(param) + 1, "%s", param);
+
+            session->next->status = AfterSqlPacket;
+                
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static int
 hash_set_internal(struct session *sessions, unsigned long sz,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
@@ -224,8 +374,10 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->tv = value;
             if (session->next->sql) 
                 free(session->next->sql);
-            session->next->sql = malloc(strlen(sql) + 1);
-            snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
+            if (sql) {
+                session->next->sql = malloc(strlen(sql) + 1);
+                snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
+            }
             session->next->cmd = cmd;
 
             if (user) {
@@ -253,8 +405,10 @@ hash_set_internal(struct session *sessions, unsigned long sz,
     session->next->lport = lport;
     
     session->next->tv = value;
-    session->next->sql = malloc(strlen(sql) + 1);
-    snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
+    if (sql) {
+        session->next->sql = malloc(strlen(sql) + 1);
+        snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
+    }
     session->next->cmd = cmd;
     
     if (user) {
@@ -301,7 +455,6 @@ hash_load_check(struct hash *hash) {
                         session->tv, session->sql, session->cmd, session->user, session->status);
                         
             }
-            
         }
 
         // Switch
@@ -346,3 +499,4 @@ hash_print(struct hash *hash) {
     
     return 0;
 }
+

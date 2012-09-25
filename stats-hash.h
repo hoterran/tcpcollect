@@ -22,7 +22,12 @@
 #if !defined(STATS_HASH_H)
 #define STATS_HASH_H
 
-enum SessionStatus {  AfterAuthPacket = 1, AfterOkPacket = 2 };
+enum SessionStatus {    AfterAuthPacket = 1, 
+                        AfterOkPacket,
+                        AfterSqlPacket,
+                        AfterResultPacket,
+                        AfterPreparePacket,
+                        AfterPrepareOkPacket };
 
 struct hash;
 
@@ -30,7 +35,7 @@ struct hash *hash_new(void);
 void hash_del(struct hash *hash);
 int hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result, char **sql, char **user);
+         struct timeval *result, char **sql, char **user, char **value);
 int hash_get_rem(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
          struct timeval *result, char** sql, char **user);
@@ -41,5 +46,25 @@ int hash_set(struct hash *hash,
 int hash_clean(struct hash *hash, unsigned long min);
 
 int hash_print(struct hash *hash);
-         
+
+int
+hash_set_stmt (struct hash *hash, 
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+         enum SessionStatus status);
+
+int 
+hash_set_param_count (struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+         int stmt_id, int param_count);
+
+int
+hash_set_param (struct hash *hash, 
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,struct timeval value, int stmt_id,
+          char *param, char *param_type, int param_count);
+
+int
+hash_get_param_count(struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+         int stmt_id, int *param_count, char **param_type);
+
 #endif

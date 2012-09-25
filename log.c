@@ -80,7 +80,7 @@ log_init(const char *prefix, const char *format, const char *suffix) {
     sigaddset(&act.sa_mask, SIGUSR1);
     sigaction(SIGUSR1, &act, NULL);
 
-    G_log.level = LOG_NOTICE;
+    G_log.level = L_DEBUG;
     G_log.syslog_enabled = 0;
 
     G_log.filename = malloc(LOG_FILE_LEN);
