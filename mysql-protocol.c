@@ -70,11 +70,11 @@ ulong lastNum;
 int
 is_sql(char *payload, int payload_len, char **user) {
 
-    /* 4 4 1 23[\0] n 8 1 n */
+    /* 4 4 1 23[\0] n 2(min, without password) n */
     int packet_length = uint3korr(payload);
 
     if (payload_len >= packet_length + 4) {
-        if (packet_length > 41) {
+        if (packet_length > 35) {
             if ((payload[13] == '\0') && (payload[35] == '\0')) {
                 *user = payload + 36;
                 return 0; // auth packet

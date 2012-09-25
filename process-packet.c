@@ -246,6 +246,10 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
 
         if (incoming) {
+            /* ignore remote MySQL port connect locate random port */
+            if ((dport != mp->mysqlPort))
+                return 1;
+
             lport = dport;
             rport = sport;
            
@@ -319,6 +323,10 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 dump(L_DEBUG, "auth packet %s", user);
             }
         } else {
+            /* ignore locate random port connect remote MySQL port */
+            if (sport != mp->mysqlPort)
+                return 1;
+
             lport = sport;
             rport = dport;
 
@@ -331,7 +339,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             char tt[16];
             char *value = NULL;
 
-            int num = parse_result(data, datalen);
+            ulong num = parse_result(data, datalen);
             int status = hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr,
                 lport, rport, &tv2, &sql, &user, &value);
 

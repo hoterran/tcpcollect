@@ -64,3 +64,8 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 * log
 * prepare
 
+
+##bug fix
+ * ignore remote MySQL port connect me random port, data, for example: replication,
+ * ignore me connect rmeote MySQL data
+
