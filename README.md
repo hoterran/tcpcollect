@@ -46,8 +46,10 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 
 ## prepare statement 的支持
 
-![use](https://raw.github.com/hoterran/tcpcollect/master/mysqlpcap-preapare.png)
+![use](https://raw.github.com/hoterran/tcpcollect/master/mysqlpcap-prepare.png)
+
 方括号里为具体的值
+
 ## TODO
 * keyword filter
 * output threading
