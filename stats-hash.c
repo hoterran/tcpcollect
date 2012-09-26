@@ -27,6 +27,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include "mysqlpcap.h"
+#include "mysql-protocol.h"
 #include "stats-hash.h"
 #include "log.h"
 
@@ -45,6 +47,10 @@ struct session {
     char *user;
     int cmd;
     enum SessionStatus status; 
+
+    uchar *lastData;
+    size_t lastDataSize;
+    ulong lastNum;
     
     struct session *next;
 
@@ -106,7 +112,8 @@ hash_del(struct hash *hash) {
 int
 hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result, char **sql, char **user, char **value)
+         struct timeval *result, char **sql, char **user, char **value,
+         uchar ***lastData, size_t **lastDataSize, ulong **lastNum )
 {
     struct session *session;
     unsigned long port;
@@ -124,6 +131,11 @@ hash_get(struct hash *hash,
             *sql = session->next->sql;
             *user = session->next->user;
             *value = session->next->param;
+
+            *lastData = &(session->next->lastData);
+            *lastDataSize = &(session->next->lastDataSize);
+            *lastNum = &(session->next->lastNum);
+
             return session->next->status;
         }
         
@@ -149,12 +161,18 @@ hash_get_rem(struct hash *hash,
             // *result = session->next->tv;
             // Now remove
             next = session->next->next;
-            if (session->next->sql)
+            if (session->next->sql) {
                 free(session->next->sql);
-            if (session->next->user)
+                session->next->sql = NULL;
+            }
+            if (session->next->user) {
                 free(session->next->user);
-            if (session->next->param)
+                session->next->user = NULL;
+            }
+            if (session->next->param) {
                 free(session->next->param);
+
+            }
             if (session->next->param_type)
                 free(session->next->param_type);
 
@@ -372,8 +390,10 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->lport == lport
         ) {
             session->next->tv = value;
-            if (session->next->sql) 
+            if (session->next->sql) {
                 free(session->next->sql);
+                session->next->sql = NULL;
+            }
             if (sql) {
                 session->next->sql = malloc(strlen(sql) + 1);
                 snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
@@ -383,6 +403,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             if (user) {
                 if (session->next->user) {
                     free(session->next->user);
+                    session->next->user = NULL;
                 }
                 session->next->user = malloc(strlen(user) + 1);
                 snprintf(session->next->user, strlen(user) + 1, "%s", user);

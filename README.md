@@ -63,6 +63,7 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 * sql
 * log
 * prepare
+* multi session big resultset
 
 
 ##bug fix

@@ -241,6 +241,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
         */
         char *sql, *user, *data;
+        user = NULL;
         int cmd = -1;
 
         data = (char*) ((unsigned char *) tcp + tcp->doff * 4);
@@ -254,8 +255,10 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             rport = sport;
            
             if (likely(is_sql(data, datalen, &user))) {
+                assert(user == NULL);
+
                 /* COM_ packet */
-                cmd = parse_sql(data, &sql, datalen);
+                cmd = data[4];
 
                 if (unlikely(cmd == COM_QUIT)) {
 
@@ -264,6 +267,9 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                         lport, rport, NULL, NULL, NULL);
 
                 } else if (unlikely(cmd == COM_STMT_PREPARE)) {
+
+                    parse_sql(data, &sql, datalen);
+                    assert(sql);
 
                     dump(L_DEBUG, "prepare packet %s %d", sql, cmd);
 
@@ -280,7 +286,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 } else if (unlikely(cmd == COM_STMT_EXECUTE)) {
 
                     int stmt_id;
-                    char *param_type = NULL;
+                    uchar *param_type = NULL;
                     uchar param[VALUE_SIZE];
                     param[0] = '\0';
                     char insert_param_type = 0;
@@ -308,7 +314,16 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                     hash_set_param(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                         lport, rport, tv, stmt_id, param, insert_param_type ? param_type:NULL, param_count);
 
+                } else if (unlikely(cmd == COM_BINLOG_DUMP)) {
+
+                    dump(L_DEBUG, "binlog dump", sql, cmd);
+                    hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                        lport, rport, tv, "binlog dump", cmd, NULL, AfterSqlPacket);
+               
                 } else if (likely(cmd >= 0)) {
+
+                    parse_sql(data, &sql, datalen);
+                    assert(sql);
 
                     dump(L_DEBUG, "sql packet %s %d", sql, cmd);
                     hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
@@ -317,6 +332,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 } else 
                     assert(NULL);
             } else {
+                assert(user);
                 /* auth packet */
                 hash_set(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                     lport, rport, tv, NULL, cmd, user, AfterAuthPacket);
@@ -337,14 +353,17 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             tm = localtime(&tv_t);
 
             char tt[16];
+            uchar **lastData = NULL;
+            size_t *lastDataSize = NULL;
+            ulong *lastNum = NULL;
             char *value = NULL;
 
-            ulong num = parse_result(data, datalen);
             int status = hash_get(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr,
-                lport, rport, &tv2, &sql, &user, &value);
+                lport, rport, &tv2, &sql, &user, &value, &lastData, &lastDataSize, &lastNum);
 
             if (likely(AfterSqlPacket == status)) {
-
+                ulong num = parse_result(data, datalen, lastData, lastDataSize, lastNum);
+                ulong latency = (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec);
                 // resultset
                 if (value) {
                     // prepare-statement
@@ -353,24 +372,22 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
                     //printf("%s-%s\n", sql, value);
                     dump(L_OK, "%-20.20s%-16ld%-10ld%-10.10s %s [%s]", tt,
-                        (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
-                        num, user,
-                        sql, value);
+                        latency, 0, user, sql, value);
                 } else {
                     // normal statement
                     snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                         tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
                     dump(L_OK, "%-20.20s%-16d%-10ld%-10.10s %s", tt,
-                        (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec),
-                        num, user,
-                        sql);
+                        latency, num, user, sql);
                 }
                 //hash_print(mp->hash); 
             } else if (0 == status) {
                     dump(L_DEBUG, "handshake packet ");
             } else if (AfterAuthPacket == status) {
-                if (unlikely(num == -1)) {
+                ulong state = parse_result(data, datalen, NULL, NULL, NULL);
+                assert( (state == ERR) || (state == OK) );
+                if (unlikely(state == ERR)) {
                     // auth error packet
                     dump(L_DEBUG, "error packet ");
                     hash_get_rem(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 

@@ -6,10 +6,18 @@
 #define ERR     (-1)
 #define PEND    (1)
 
+typedef unsigned short uint16;
+typedef unsigned int uint;
+typedef unsigned int uint32;
+typedef unsigned char uchar;
+typedef unsigned long ulong;
+
 #define CAP_LEN 65536
 
+#include <pcap.h>
+
 typedef struct _MysqlPcap {
-    pcap_t      *pd;
+    void        *pd;
     int         mysqlPort;
     char        filter[10240];
     char        netDev[10];

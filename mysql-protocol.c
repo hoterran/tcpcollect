@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+
+#include "mysqlpcap.h"
 #include "mysql-protocol.h"
 
 #define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
@@ -63,9 +65,9 @@ ulong field_packet(char* payload, int payload_len, ulong field_number);
 ulong net_field_length(char *packet);
 ulong lcb_length(char *packet);
 
-uchar *lastData;
-size_t lastDataSize;
-ulong lastNum;
+uchar **lastData;
+size_t *lastDataSize;
+ulong *lastNum;
 
 int
 is_sql(char *payload, int payload_len, char **user) {
@@ -79,11 +81,12 @@ is_sql(char *payload, int payload_len, char **user) {
                 *user = payload + 36;
                 return 0; // auth packet
             }
+        } else {
+            return 1; // COM_* Packet
         }
     }
-    return 1; // COM_* Packet
+    return -1; 
 }
-
 
 int
 parse_sql(char* payload, char** sql, int payload_len) {
@@ -106,22 +109,28 @@ parse_sql(char* payload, char** sql, int payload_len) {
  *  error
  *  resultset
  *  if a complete resultset size larger than tcp packet will failure
- */
+*/
+
 ulong
-parse_result(char* payload, int payload_len) {
+parse_result(char* payload, int payload_len,
+    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum) {
 
     ulong ret;
     char *newData = NULL;
 
-    if (lastData) {
-        //printf("here\n");
-        newData = malloc(payload_len + lastDataSize);
-        memcpy(newData, lastData, lastDataSize);
-        memcpy(newData + lastDataSize, payload, payload_len);
-        free(lastData);
-        lastData = NULL;
+    lastData = myLastData;
+    lastDataSize = myLastDataSize;
+    lastNum = myLastNum;
 
-        ret = resultset_packet(newData, payload_len + lastDataSize, lastNum);
+    if (lastData && *lastData) {
+        //printf("here\n");
+        newData = malloc(payload_len + *lastDataSize);
+        memcpy(newData, *lastData, *lastDataSize);
+        memcpy(newData + *lastDataSize, payload, payload_len);
+        free(*lastData);
+        *lastData = NULL;
+
+        ret = resultset_packet(newData, payload_len + *lastDataSize, *lastNum);
 
         free(newData); 
         newData = NULL;
@@ -201,10 +210,10 @@ resultset_packet(char *payload, int payload_len, ulong num) {
     // mysql packets larger than a tcp packet
     // so need leave data next tcp packet
     //printf("last data is %d %d\n", payload_len, num);
-    lastData = malloc(payload_len);
-    memcpy(lastData, payload, payload_len);
-    lastDataSize = payload_len;
-    lastNum = num;
+    *lastData = malloc(payload_len);
+    memcpy(*lastData, payload, payload_len);
+    *lastDataSize = payload_len;
+    *lastNum = num;
     return -2;
 }
 
@@ -218,7 +227,7 @@ ok_packet(char *payload, int payload_len) {
 
 ulong 
 error_packet(char *payload, int payload_len) {
-    return -1;
+    return ERR;
 }
 
 ulong 
