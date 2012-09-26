@@ -97,8 +97,12 @@ get_addresses() {
 }
 
 /* address[] = "1.1.1.1, 2.2.2.2, 3.3.3.3*/
-int
-parse_addresses(char addresses[], AddressList *al) {
+AddressList *
+parse_addresses(char addresses[]) {
+
+    AddressList *al = malloc(sizeof(AddressList));
+    AddressList *head = al;
+
     char *next, *comma;
     next = addresses;
     
@@ -120,7 +124,8 @@ parse_addresses(char addresses[], AddressList *al) {
         
         if (!inet_aton(current, &al->next->in_addr)) {
             free(current);
-            return 1;
+            //TODO
+            return NULL;
             
         }
         
@@ -139,11 +144,11 @@ parse_addresses(char addresses[], AddressList *al) {
     al->next->next = NULL;
     
     if (!inet_aton(next, &al->next->in_addr))
-        return 1;
+        return NULL;
     
     al = al->next;
             
-    return 0;
+    return head;
 }
 
 int

@@ -131,7 +131,12 @@ void
 init(MysqlPcap *mp) {
     mp->mysqlPort = 3306;
     snprintf(mp->netDev, sizeof(mp->netDev), "%s", "any");
-    mp->al = get_addresses();
+    if (mp->address) {
+        dump(L_WARN, "address %s", mp->address);
+        mp->al = parse_addresses(mp->address);
+    } else {
+        mp->al = get_addresses();
+    }
     mp->hash = hash_new();
 }
 
@@ -142,16 +147,15 @@ main (int argc, char **argv) {
 
     char usage[] = "Usage: \n\tmysqlstat -p [port] mysql port default 3306\n"
                     "\t -d daemon default yes\n \t -f [filename] default tty\n"
-                    "\t -i [dev]\n";
+                    "\t -i [dev]\n"
+                    "\t -l address1,address2\n";
 
     MysqlPcap *mp = calloc(1, sizeof(*mp));
 
     if (NULL == mp) return ERR;
 
-    init(mp);
-
     char ch;
-    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:"))) {
+    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:l:"))) {
         switch (ch) {
             case 'p' :
                 mp->mysqlPort = atoi(optarg);
@@ -168,12 +172,18 @@ main (int argc, char **argv) {
             case 'i' :
                 snprintf(mp->netDev, sizeof(mp->netDev), "%s", optarg); 
                 break; 
+            case 'l':
+                mp->address = malloc(strlen(optarg) + 1);
+                snprintf(mp->address, strlen(optarg) + 1, "%s", optarg);
+                break;
             case 'h' :
             default :
                 printf("%s", usage);
                 return ERR;
         }
     }
+
+    init(mp);
 
     if (0 != single_process(argv[0])) return ERR; 
 

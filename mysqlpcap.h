@@ -27,6 +27,7 @@ typedef struct _MysqlPcap {
     char        keyWord[256];
     void*       al;
     void*       hash;
+    char*       address;
 } MysqlPcap;
 
 #endif

@@ -29,7 +29,8 @@ struct address_list;
 typedef struct address_list AddressList;
 
 AddressList* get_addresses();
-int parse_addresses(char [], AddressList *al);
+AddressList* parse_addresses(char []);
+
 int free_addresses(AddressList *al);
 
 int is_local_address(AddressList*, struct in_addr);
