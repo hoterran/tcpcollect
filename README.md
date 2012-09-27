@@ -20,11 +20,11 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 ![use](https://raw.github.com/hoterran/tcpcollect/master/mysqlpcap.png)
 
 
-	如果机器上的网卡是 ``bond``，则需要指定具体的``ip``
+如果机器上的网卡是 ``bond``，则需要指定具体的``ip``
 
 	sudo ./mysqlpcap -l 1.2.3.4, 5.6.7.8
 
-##format
+##output format
 
 	timestamp           sql                                     latency(us)     rows            
 	---------           ---                                     -----------     ---             
@@ -52,7 +52,7 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 
 ![use](https://raw.github.com/hoterran/tcpcollect/master/mysqlpcap-prepare.png)
 
-方括号里为具体的值
+sql 在前面，方括号里为具体的值。
 
 ## TODO
 * keyword filter
