@@ -18,6 +18,8 @@ MYSQL_TYPE_DATETIME     DATETIME field
 #define DROP_SAMPLE_TABLE "DROP TABLE IF EXISTS test_table"
 #define CREATE_SAMPLE_TABLE "CREATE TABLE test_table(col1 INT, col2 VARCHAR(40), col3 SMALLINT, col4 TIMESTAMP, col5 datetime, col6 date, col7 time)"
 #define INSERT_SAMPLE "INSERT INTO test_table(col1,col2,col3, col4, col5, col6, col7) VALUES(?,?,?,?,?,?,?)"
+#define INSERT_SAMPLE2 "INSERT INTO test_table(col1,col2,col3) VALUES(?,?,?)"
+
 int main (int argc, char *argv[]) {
 
     MYSQL *mysql;
@@ -215,11 +217,63 @@ int main (int argc, char *argv[]) {
       fprintf(stderr, " invalid affected rows by MySQL\n");
       exit(0);
     }
+
+    //-----------------------------
+
+    MYSQL_STMT    *stmt2;
+    MYSQL_BIND    bind2[3];
+
+    stmt2 = mysql_stmt_init(mysql);
+
+    //here get stmt_id
+    mysql_stmt_prepare(stmt2, INSERT_SAMPLE2, strlen(INSERT_SAMPLE2));
+
+    memset(bind2, 0, sizeof(bind2));
+
+    /* INTEGER PARAM */
+    /* This is a number type, so there is no need to specify buffer_length */
+    bind2[0].buffer_type= MYSQL_TYPE_LONG;
+    bind2[0].buffer= (char *)&int_data;
+    bind2[0].is_null= 0;
+
+    /* STRING PARAM */
+    bind2[1].buffer_type= MYSQL_TYPE_STRING;
+    bind2[1].buffer= (char *)str_data;
+    //bind[1].buffer_length= STRING_SIZE;  //最大长度, string not use this, 其它类型buffer_length 也没用
+    bind2[1].is_null= 0;
+    bind2[1].length= &str_length;        //实际大小, bind_
+
+    /* SMALLINT PARAM */
+    bind2[2].buffer_type= MYSQL_TYPE_SHORT;
+    bind2[2].buffer= (char *)&small_data;
+    bind2[2].is_null= &is_null;
+
+    /* Bind the buffers */
+    mysql_stmt_bind_param(stmt2, bind2);
+
+    /* Specify the data values for the first row -------------------------------------------------- */
+    int_data= 999;             /* integer */
+    strncpy(str_data, "LALA", STRING_SIZE); /* string  */
+    str_length= strlen(str_data);
+
+    t.year= 2017;
+    t.month= 02;
+    t.day= 03;
+
+    t.hour= 10;
+    t.minute= 45;
+    t.second= 20;
+
+    /* INSERT SMALLINT data as NULL */
+    is_null= 1;
+
+    /* Execute the INSERT statement - 1*/
+    mysql_stmt_execute(stmt2);
+
+    mysql_stmt_execute(stmt);
+
     /* Close the statement */
-    if (mysql_stmt_close(stmt))
-    {
-      fprintf(stderr, " failed while closing the statement\n");
-      fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
-      exit(0);
-    }
+    mysql_stmt_close(stmt2);
+
+    mysql_stmt_close(stmt);
 }

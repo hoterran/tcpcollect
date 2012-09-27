@@ -1,26 +1,3 @@
-/**
- *   tcprstat -- Extract stats about TCP response times
- *   Copyright (C) 2010  Ignacio Nin
- *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation; either version 2 of the License, or
- *   (at your option) any later version.
- *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program; if not, write to the Free Software
- *   Foundation, Inc.,
- *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
- *
-**/
-
-#include "process-packet.h"
-
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -36,10 +13,11 @@
 #include <assert.h>
 
 #include "log.h"
-#include "local-addresses.h"
+#include "packet.h"
+#include "address.h"
 #include "mysqlpcap.h"
-#include "mysql-protocol.h"
-#include "stats-hash.h"
+#include "protocol.h"
+#include "hash.h"
 
 #define likely(x)   __builtin_expect(!!(x), 1) 
 #define unlikely(x) __builtin_expect(!!(x), 0) 
@@ -289,30 +267,31 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                     uchar *param_type = NULL;
                     uchar param[VALUE_SIZE];
                     param[0] = '\0';
-                    char insert_param_type = 0;
-                    int param_count;
+                    int insert_param_type = 0;
+                    int param_count = -1;
 
                     /* stmt_id */
                     parse_stmt_id(data, datalen, &stmt_id);
 
                     /* param_count, param_type(possible) */
+                    
                     hash_get_param_count(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
                         lport, rport, stmt_id, &param_count, &param_type);
 
-                    assert(param_count > 0);
+                    if (param_count != -1) {
+                        /* prepare cant find, param_type in payload */
+                        //if (param_type == NULL)
+                        //   insert_param_type = 1;
 
-                    /* param_type in payload */
-                    if (param_type == NULL)
-                        insert_param_type = 1;
+                        insert_param_type = parse_param(data, datalen, param_count, &param_type, &param[0]);
 
-                    insert_param_type = parse_param(data, datalen, param_count, &param_type, &param[0]);
+                        assert(param_type);
 
-                    assert(param_type);
+                        dump(L_DEBUG, "execute packet %s %d", sql, cmd);
 
-                    dump(L_DEBUG, "execute packet %s %d", sql, cmd);
-
-                    hash_set_param(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
-                        lport, rport, tv, stmt_id, param, insert_param_type ? param_type:NULL, param_count);
+                        hash_set_param(mp->hash, ip->ip_dst.s_addr, ip->ip_src.s_addr, 
+                            lport, rport, tv, stmt_id, param, insert_param_type ? param_type:NULL, param_count);
+                    }
 
                 } else if (unlikely(cmd == COM_BINLOG_DUMP)) {
 
@@ -363,6 +342,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
             if (likely(AfterSqlPacket == status)) {
                 ulong num = parse_result(data, datalen, lastData, lastDataSize, lastNum);
+                assert((num == -2) || (num >= 0));
                 ulong latency = (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec);
                 // resultset
                 if (value) {
@@ -370,20 +350,20 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                     snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                         tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
-                    //printf("%s-%s\n", sql, value);
                     dump(L_OK, "%-20.20s%-16ld%-10ld%-10.10s %s [%s]", tt,
-                        latency, 0, user, sql, value);
+                        latency, num, user, sql, value);
                 } else {
                     // normal statement
                     snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                         tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
                     dump(L_OK, "%-20.20s%-16d%-10ld%-10.10s %s", tt,
+                        //latency, num, user, sql);
                         latency, num, user, sql);
                 }
                 //hash_print(mp->hash); 
             } else if (0 == status) {
-                    dump(L_DEBUG, "handshake packet ");
+                    dump(L_DEBUG, "handshake packet or out packet but cant find session ");
             } else if (AfterAuthPacket == status) {
                 ulong state = parse_result(data, datalen, NULL, NULL, NULL);
                 assert( (state == ERR) || (state == OK) );
@@ -401,9 +381,12 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             } else if (AfterPreparePacket == status) {
                     dump(L_DEBUG, "prepare ok packet ");
 
-                    int stmt_id;
-                    short param_count;
+                    int stmt_id = 0;
+                    short param_count = 0;
                     parse_prepare_ok(data, datalen, &stmt_id, &param_count);
+
+                    assert(stmt_id > 0);
+                    assert(param_count >= 0);
 
                     hash_set_param_count(mp->hash, ip->ip_src.s_addr, ip->ip_dst.s_addr, 
                         lport, rport, stmt_id, param_count);

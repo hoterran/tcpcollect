@@ -19,9 +19,9 @@
 
 #include "log.h"
 #include "mysqlpcap.h"
-#include "local-addresses.h"
-#include "process-packet.h"
-#include "stats-hash.h"
+#include "address.h"
+#include "packet.h"
+#include "hash.h"
 
 #define SIZE_IP         16
 #define SIZE_ETHERNET   14

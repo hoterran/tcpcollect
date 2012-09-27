@@ -18,7 +18,7 @@ libpcap:dummy
 
 mysqlpcap:LOADLIBES += libpcap/libpcap.a
 mysqlpcap:CFLAGS += -Ilibpcap
-mysqlpcap: mysqlpcap.c stats-hash.o log.o process-packet.o mysql-protocol.o local-addresses.o
+mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o
 
 clean:
 	- rm -f *.o mysqlpcap && cd libpcap && make clean

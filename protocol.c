@@ -5,7 +5,7 @@
 #include <assert.h>
 
 #include "mysqlpcap.h"
-#include "mysql-protocol.h"
+#include "protocol.h"
 
 #define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
     ((uint16) ((uchar) (A)[1]) << 8))
@@ -274,43 +274,43 @@ lcb_length(char *packet) {
 
 static void store_param_null(char *buff) {            
 
-    sprintf(buff + strlen(buff), "NULL, ");
+    sprintf(buff + strlen(buff), "NULL,");
 }
 
 static void store_param_tinyint(char *buff, char *param) {            
 
     char c = *(uchar *) param;
-    sprintf(buff + strlen(buff), "%c, ", c);
+    sprintf(buff + strlen(buff), "%c,", c);
 }
 
 static void store_param_short(char *buff, char *param) {           
 
     short value = *(short*) param;
-    sprintf(buff + strlen(buff), "%hd, ", value);
+    sprintf(buff + strlen(buff), "%hd,", value);
 }
 
 static void store_param_int32(char *buff, char *param) {            
 
     int value = *(int*) param;
-    sprintf(buff + strlen(buff), "%d, ", value);
+    sprintf(buff + strlen(buff), "%d,", value);
 }    
 
 static void store_param_int64(char *buff, char *param) {    
 
     long value = *(long*) param;
-    sprintf(buff + strlen(buff), "%ld, ", value);
+    sprintf(buff + strlen(buff), "%ld,", value);
 }    
 
 static void store_param_float(char *buff, char *param) {    
 
     float value = *(float*) param;
-    sprintf(buff + strlen(buff), "%f, ", value);
+    sprintf(buff + strlen(buff), "%f,", value);
 }
 
 static void store_param_double(char *buff, char *param) {   
 
     double value = *(double*) param;
-    sprintf(buff + strlen(buff), "%lf, ", value);
+    sprintf(buff + strlen(buff), "%lf,", value);
 }   
 
 static int store_param_str(char *buff, char *param) {
