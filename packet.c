@@ -272,6 +272,10 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
                     /* stmt_id */
                     parse_stmt_id(data, datalen, &stmt_id);
+                    if (stmt_id <= 0) {
+                        dump(L_DEBUG, "stmt error ");
+                        return 1;
+                    }
 
                     /* param_count, param_type(possible) */
                     
@@ -300,7 +304,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                         lport, rport, tv, "binlog dump", cmd, NULL, AfterSqlPacket);
                
                 } else if (likely(cmd >= 0)) {
-
+                    /* COM_QUERY */
                     parse_sql(data, &sql, datalen);
                     assert(sql);
 

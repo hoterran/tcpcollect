@@ -37,12 +37,13 @@
 
 uint8_t GoutputFlg = 0;
 
-void switch_flg(int sig) {
+void switch_flg(int sig) 
+{
     if (SIGALRM == sig) GoutputFlg = 1;
 }
 
-int daemon_init(void) {
-
+int daemon_init(void) 
+{
     pid_t pid;
     if((pid = fork())< 0) {
             return ERR;
@@ -64,11 +65,11 @@ int daemon_init(void) {
     return OK;
 }
 
-void 
-sig_pipe_handler(int sig) {
+void sig_pipe_handler(int sig) 
+{
         return;
 }      
-
+/* for single process */
 int lock_fd;
 
 int 

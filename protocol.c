@@ -426,6 +426,7 @@ parse_param(char *payload, int payload_len, int param_count,
     int ret = 0;
     int null_count_length = (param_count+7) / 8;
     char* null_pos = NULL;
+    const uint signed_bit= 1 << 15;
 
     if (payload_len >= packet_length + 4) {
         pos++;  /*skip COM_STMT_EXECUTE */
@@ -453,7 +454,7 @@ parse_param(char *payload, int payload_len, int param_count,
         int length;
 
         for (;i < param_count; i++) {
-            type = uint2korr(tmp_param_type);
+            type = uint2korr(tmp_param_type) & ~signed_bit;
             tmp_param_type = tmp_param_type + 2;
 
             // null 
