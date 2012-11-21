@@ -5,12 +5,12 @@
 #include <string.h>
 #include <sys/time.h>
 #include <string.h>
-#include <assert.h>
 
 #include "mysqlpcap.h"
 #include "protocol.h"
 #include "hash.h"
 #include "log.h"
+#include "utils.h"
 
 #define INITIAL_HASH_SZ     2053
 #define MAX_LOAD_PERCENT    65
@@ -31,6 +31,7 @@ struct session {
     uchar *lastData;
     size_t lastDataSize;
     ulong lastNum;
+    uint  tcp_seq;
     
     struct session *next;
 
@@ -93,7 +94,7 @@ int
 hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
          struct timeval *result, char **sql, char **user, char **value,
-         uchar ***lastData, size_t **lastDataSize, ulong **lastNum )
+         uchar ***lastData, size_t **lastDataSize, ulong **lastNum, uint **tcp_seq)
 {
     struct session *session;
     unsigned long port;
@@ -115,6 +116,7 @@ hash_get(struct hash *hash,
             *lastData = &(session->next->lastData);
             *lastDataSize = &(session->next->lastDataSize);
             *lastNum = &(session->next->lastNum);
+            *tcp_seq = &(session->next->tcp_seq);
 
             return session->next->status;
         }
@@ -228,8 +230,8 @@ hash_get_param_count(struct hash *hash,
     
     port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
 
-    assert(param_count > 0);
-    assert(stmt_id > 0);
+    ASSERT(param_count > 0);
+    ASSERT(stmt_id > 0);
 
     for (session = hash->sessions + port; session->next; session = session->next) {
         if (
@@ -259,8 +261,8 @@ hash_set_param_count(struct hash *hash,
     
     port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
 
-    assert(param_count >= 0);
-    assert(stmt_id > 0);
+    ASSERT(param_count >= 0);
+    ASSERT(stmt_id > 0);
 
     for (session = hash->sessions + port; session->next; session = session->next) {
         if (
@@ -270,13 +272,14 @@ hash_set_param_count(struct hash *hash,
             session->next->lport == lport
         ) {
 
+            session->next->tcp_seq = 0;
 //            ASSERT(session->next->is_stmt);
             session->next->stmt_id = stmt_id;
 
             if (session->next->param_count == param_count) 
                 return 0;
             else {
-                //assert(session->next->param_type);
+                //ASSERT(session->next->param_type);
                 //free(session->next->param_type);
                 if (session->next->param_type)
                     free(session->next->param_type);
@@ -302,7 +305,7 @@ hash_set_param (struct hash *hash,
     
     port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
 
-    assert(param > 0);
+    ASSERT(param > 0);
 
     for (session = hash->sessions + port; session->next; session = session->next) {
         if (
@@ -312,22 +315,24 @@ hash_set_param (struct hash *hash,
             session->next->lport == lport
         ) {
 
+            session->next->tcp_seq = 0;
 //            ASSERT(session->next->is_stmt);
-            assert(session->next->stmt_id = stmt_id);
-            assert(param_count);
+            /* TODO need open below ASSERT */
+            //ASSERT(session->next->stmt_id == stmt_id);
+            ASSERT(param_count);
 
             session->next->tv = tv;
 
             /* copy param_type */
 
-            assert(session->next->param_count == param_count);
+            ASSERT(session->next->param_count == param_count);
 
-            if (param_type) {
+            if (param_type != session->next->param_type) {
                 memcpy(session->next->param_type, param_type, 2 * param_count);
             }
 
-            assert(param);
-            assert(strlen(param));
+            ASSERT(param);
+            ASSERT(strlen(param));
 
             int len = 0;
             if (NULL == session->next->param) {
@@ -369,6 +374,11 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->rport == rport &&
             session->next->lport == lport
         ) {
+            session->next->tcp_seq = 0;
+            if (session->next->param) {
+                free(session->next->param);
+                session->next->param = NULL; // prepare then a normal sql, need remove this
+            }
             session->next->tv = value;
             if (session->next->sql) {
                 free(session->next->sql);

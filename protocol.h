@@ -21,21 +21,20 @@ enum enum_field_types { MYSQL_TYPE_DECIMAL, MYSQL_TYPE_TINY,
              
 };
 
+int is_sql (char *payload, uint32 payload_len, char **user);
 
-int is_sql (char *payload, int payload_len, char **user);
+int parse_sql(char *payload, uint32 payload_len, char** sql);
 
-int parse_sql(char *payload, char** sql, int payload_len);
-
-ulong parse_result(char* payload, int payload_len, 
+ulong parse_result(char* payload, uint32 payload_len, 
     uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum);
 
-int parse_param(char *payload, int payload_len, int param_count, 
-    char **param_type, char *param);
+char *parse_param(char *payload, uint32 payload_len, int param_count, 
+    char *param_type, char *param);
 
-int parse_stmt_id(char *payload, int payload_len, int *stmt_id);
+int parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id);
 
-int parse_prepare_ok(char *payload, int payload_len, int *stmt_id, 
-    short *param_count);
+int parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, 
+    int *param_count);
 
-int parse_stmt_id(char *payload, int payload_len, int *stmt_id);
+int parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id);
 

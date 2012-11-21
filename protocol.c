@@ -2,8 +2,9 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
+#include "log.h"
+#include "utils.h"
 #include "mysqlpcap.h"
 #include "protocol.h"
 
@@ -56,11 +57,11 @@
                               *((T)+6)=(char) ((uchar *) &V)[1];\
                               *((T)+7)=(char) ((uchar *) &V)[0]; } while(0)
 
-ulong error_packet(char *payload, int payload_len);
-ulong ok_packet(char *payload, int payload_len);
-ulong resultset_packet(char *payload, int payload_len, ulong num);
-ulong eof_packet(char* payload, int payload_len);
-ulong field_packet(char* payload, int payload_len, ulong field_number);
+ulong error_packet(char *payload, uint32 payload_len);
+ulong ok_packet(char *payload, uint32 payload_len);
+ulong resultset_packet(char *payload, uint32 payload_len, ulong num);
+ulong eof_packet(char* payload, uint32 payload_len);
+ulong field_packet(char* payload, uint32 payload_len, ulong field_number);
 
 ulong net_field_length(char *packet);
 ulong lcb_length(char *packet);
@@ -70,7 +71,7 @@ size_t *lastDataSize;
 ulong *lastNum;
 
 int
-is_sql(char *payload, int payload_len, char **user) {
+is_sql(char *payload, uint32 payload_len, char **user) {
 
     /* 4 4 1 23[\0] n 2(min, without password) n */
     int packet_length = uint3korr(payload);
@@ -89,7 +90,7 @@ is_sql(char *payload, int payload_len, char **user) {
 }
 
 int
-parse_sql(char* payload, char** sql, int payload_len) {
+parse_sql(char* payload, uint32 payload_len, char **sql) {
 
     /*3 1 1 sql */
     int packet_length = uint3korr(payload);
@@ -112,7 +113,7 @@ parse_sql(char* payload, char** sql, int payload_len) {
 */
 
 ulong
-parse_result(char* payload, int payload_len,
+parse_result(char* payload, uint32 payload_len,
     uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum) {
 
     ulong ret;
@@ -123,7 +124,17 @@ parse_result(char* payload, int payload_len,
     lastNum = myLastNum;
 
     if (lastData && *lastData) {
-        //printf("here\n");
+
+        /*
+        uchar *p; 
+        int i = 0;
+        for(p = *lastData; i<*lastDataSize; i++, p++) {
+            //printf("\\x%02x %p\n", *p, p); 
+        }   
+        */
+
+        ASSERT(*lastDataSize > 0);
+        //printf("lastDataSize=%d lastData=%x \n", *lastDataSize, *myLastData);
         newData = malloc(payload_len + *lastDataSize);
         memcpy(newData, *lastData, *lastDataSize);
         memcpy(newData + *lastDataSize, payload, payload_len);
@@ -162,7 +173,7 @@ parse_result(char* payload, int payload_len,
 }
 
 ulong
-field_packet(char* payload, int payload_len, ulong field_number) {
+field_packet(char* payload, uint32 payload_len, ulong field_number) {
 
     if (field_number == 0)
         return eof_packet(payload, payload_len);
@@ -180,7 +191,7 @@ field_packet(char* payload, int payload_len, ulong field_number) {
 }
 
 ulong
-eof_packet(char* payload, int payload_len) {
+eof_packet(char* payload, uint32 payload_len) {
 
     if (payload_len > 4) {
         uchar c = payload[4]; 
@@ -192,11 +203,14 @@ eof_packet(char* payload, int payload_len) {
 }
 
 ulong
-resultset_packet(char *payload, int payload_len, ulong num) {
+resultset_packet(char *payload, uint32 payload_len, ulong num) {
 
+    int resultset_packet_length = 0;
     if (payload_len > 4) {
-        int resultset_packet_length = uint3korr(payload);
+        resultset_packet_length = uint3korr(payload);
         if (resultset_packet_length + 4 < payload_len) {
+            ASSERT(resultset_packet_length < 100);
+            //printf("-------length %d number -------%d\n", resultset_packet_length, *(payload + 3));
             /* resultset */
             return resultset_packet(payload + 4 + resultset_packet_length,
                 payload_len - 4 - resultset_packet_length, num + 1);
@@ -209,16 +223,29 @@ resultset_packet(char *payload, int payload_len, ulong num) {
 
     // mysql packets larger than a tcp packet
     // so need leave data next tcp packet
-    //printf("last data is %d %d\n", payload_len, num);
-    *lastData = malloc(payload_len);
+    ASSERT(*lastData == NULL);
+    *lastData = malloc(payload_len + 1);
     memcpy(*lastData, payload, payload_len);
+    (*lastData)[payload_len] = 0;
     *lastDataSize = payload_len;
     *lastNum = num;
+    ASSERT(resultset_packet_length < 100);
+
+    /*
+    uchar *p; 
+    int i = 0;
+    for(p = payload; i<payload_len; i++, p++) {
+        //printf("\\x%02x %p\n", *p, p); 
+    }   
+    */
+
+    //printf("lastDataSize=%ld currentNum=%ld resultsetLength=%d lastData=%x\n", 
+     //   payload_len, num, resultset_packet_length, *lastData);
     return -2;
 }
 
 ulong 
-ok_packet(char *payload, int payload_len) {
+ok_packet(char *payload, uint32 payload_len) {
 
     /* packet length has parsed, so skip*/
     /* TODO no conclude len, possible codedump */
@@ -226,7 +253,7 @@ ok_packet(char *payload, int payload_len) {
 }
 
 ulong 
-error_packet(char *payload, int payload_len) {
+error_packet(char *payload, uint32 payload_len) {
     return ERR;
 }
 
@@ -335,7 +362,7 @@ static int store_param_str(char *buff, char *param) {
 static int store_param_datetime(char* buffer, char *param) {
 
     char length = *param;
-    assert((length == 11) || (length == 4));
+    ASSERT((length == 11) || (length == 4));
 
     int year = uint2korr(param+1);
 
@@ -351,11 +378,12 @@ static int store_param_datetime(char* buffer, char *param) {
     return length + 1;
 }
 
-static int store_param_time(char* buffer, char *param) {
+static int 
+store_param_time(char* buffer, char *param) {
 
     char length = *param;
 
-    assert(length == 12);
+    ASSERT(length == 12);
 
     int day = uint4korr(param+2); //skip length and neg
 
@@ -365,8 +393,8 @@ static int store_param_time(char* buffer, char *param) {
 }
 
 int
-parse_prepare_ok(char *payload, int payload_len, int *stmt_id, 
-    short *param_count) {
+parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, 
+    int *param_count) {
     
     int packet_length = uint3korr(payload);
     int pos = 4;
@@ -382,7 +410,7 @@ parse_prepare_ok(char *payload, int payload_len, int *stmt_id,
 }
 
 int
-parse_stmt_id(char *payload, int payload_len, int *stmt_id) {
+parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id) {
 
     int packet_length = uint3korr(payload);
     int pos = 4;
@@ -398,32 +426,27 @@ parse_stmt_id(char *payload, int payload_len, int *stmt_id) {
     param_count conclude param_type size 
 
     param is output
-*/
 
-int 
-parse_param(char *payload, int payload_len, int param_count, 
-    char **param_type, char *param) {
-
-    /* 
         COM_STMT_EXECUTE    1
         stmt_id             4
         flags               5
         null_count          1
         send_types_to_server    1
-
             type1               2
             type2               2
             typeN               2
-
         param1              N
         param2              N
         paramN              N
-    */
+*/
+
+char *
+parse_param(char *payload, uint32 payload_len, int param_count, 
+    char *param_type, char *param) {
+
     int packet_length = uint3korr(payload);
     int pos = 4;
-    char *tmp_param_type;
-    char *tmp_param = param;
-    int ret = 0;
+    char *param_type_pos = NULL;
     int null_count_length = (param_count+7) / 8;
     char* null_pos = NULL;
     const uint signed_bit= 1 << 15;
@@ -436,69 +459,62 @@ parse_param(char *payload, int payload_len, int param_count,
         char send_types_to_server = payload[pos];
         pos++;
 
+        /* if =1 use below param_type, else use input param_type */
         if (send_types_to_server == 1) {
-            /* here free old param_type, bad code*/
-            //if (*param_type) {
-             //   free(*param_type); 
-            //}
-            
-            *param_type = payload + pos; 
+            param_type = param_type_pos  = payload + pos;
             pos = pos + 2 * param_count; /* each type 2 bytes */
-            ret = 1;
         }
-
-        tmp_param_type = *param_type;
 
         int i = 0;
         short type;
         int length;
 
         for (;i < param_count; i++) {
-            type = uint2korr(tmp_param_type) & ~signed_bit;
-            tmp_param_type = tmp_param_type + 2;
+            type = uint2korr(param_type) & ~signed_bit;
+            param_type = param_type + 2;
 
             // null 
             if(null_pos[i/8] & (1<<i)) {
-                store_param_null(tmp_param);
+                store_param_null(param);
                 continue;
             }
 
             switch (type) {
                 case MYSQL_TYPE_NULL:
-                store_param_null(tmp_param);
+                store_param_null(param);
                 break;
             case MYSQL_TYPE_TINY:
-                store_param_tinyint(tmp_param, payload + pos);
+                store_param_tinyint(param, payload + pos);
                 pos++;
                 break;                   
             case MYSQL_TYPE_SHORT:
-                store_param_short(tmp_param, payload + pos);
+                store_param_short(param, payload + pos);
                 pos = pos + 2;
                 break;                   
             case MYSQL_TYPE_LONG:
-                store_param_int32(tmp_param, payload + pos);
+                store_param_int32(param, payload + pos);
                 pos = pos + 4;
                 break;
             case MYSQL_TYPE_LONGLONG:
-                store_param_int64(tmp_param, payload + pos);
+                store_param_int64(param, payload + pos);
                 pos = pos + 8;
                 break;
             case MYSQL_TYPE_FLOAT:
-                store_param_float(tmp_param, payload + pos);
+                store_param_float(param, payload + pos);
                 pos = pos + 4;
                 break;
             case MYSQL_TYPE_DOUBLE:
-                store_param_double(tmp_param, payload + pos);
+                store_param_double(param, payload + pos);
                 pos = pos + 8;
                 break;
             case MYSQL_TYPE_TIME:
-                length = store_param_time(tmp_param, payload + pos);
+                length = store_param_time(param, payload + pos);
                 pos = pos + length; 
                 break;                       
             case MYSQL_TYPE_DATE:
             case MYSQL_TYPE_DATETIME:          
             case MYSQL_TYPE_TIMESTAMP:         
-                length = store_param_datetime(tmp_param, payload + pos);
+                length = store_param_datetime(param, payload + pos);
                 pos = pos + length; 
                 break;                       
             case MYSQL_TYPE_TINY_BLOB:         
@@ -511,15 +527,15 @@ parse_param(char *payload, int payload_len, int param_count,
             case MYSQL_TYPE_DECIMAL:           
             case MYSQL_TYPE_NEWDECIMAL:    
                 
-                length = store_param_str(tmp_param, payload + pos);
+                length = store_param_str(param, payload + pos);
                 pos = pos + length;
             default:
                 break;
             }
         }
         /*skip last ,*/
-        tmp_param[strlen(tmp_param) - 1] = '\0';
-        return ret;
+        param[strlen(param) - 1] = '\0';
+        return param_type_pos;
     }
-    return -1;
+    return NULL;
 }

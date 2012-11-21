@@ -13,7 +13,6 @@
 #define LOG_FILE_LEN 128
 #define PREFIX_LEN 32
 
-
 typedef struct _Log_t {
     int level;
     char syslog_enabled;
@@ -56,7 +55,8 @@ void log_change_filename(time_t t) {
  */
 
 /* use signal change level */
-void sigusr1_handler() {
+void 
+sigusr1_handler() {
     if (G_log.level == L_OK)
         G_log.level = L_DEBUG;
     else 

@@ -13,12 +13,19 @@ TARGET=libpcap mysqlpcap
 
 all:$(TARGET) 
 
-libpcap:dummy
+libpcap-pfring: dummy
+	@cd libpcap-pfring && ./configure && make
+
+libpcap: dummy
 	@cd libpcap && ./configure && make
 
 mysqlpcap:LOADLIBES += libpcap/libpcap.a
-mysqlpcap:CFLAGS += -Ilibpcap
-mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o
+mysqlpcap:CFLAGS += -Ilibpcap -DDEBUG
+mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o adlist.o utils.o
+
+#mysqlpcap:LOADLIBES += lib/libpcap.a lib/libpfring.a -lpthread
+#mysqlpcap:CFLAGS += -Ilibpcap-pfring
+#mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o adlist.o utils.o
 
 clean:
 	- rm -f *.o mysqlpcap && cd libpcap && make clean
