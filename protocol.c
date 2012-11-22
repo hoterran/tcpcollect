@@ -73,15 +73,22 @@ ulong *lastNum;
 int
 is_sql(char *payload, uint32 payload_len, char **user) {
 
-    /* 4 4 1 23[\0] n 2(min, without password) n */
+    /*
+        4 4 1 23[\0] n 2(min, without password) n 
+        how to difer sql packet and auth packet
+    */
     int packet_length = uint3korr(payload);
 
     if (payload_len >= packet_length + 4) {
         if (packet_length > 35) {
-            if ((payload[13] == '\0') && (payload[35] == '\0')) {
-                *user = payload + 36;
-                return 0; // auth packet
+            int i;
+            for( i = 13; i <= 35; i++) {
+                if (payload[i] != '\0') {
+                    return 1; 
+                }
             }
+            *user = payload + 36;
+            return 0; // auth packet
         } else {
             return 1; // COM_* Packet
         }
@@ -209,7 +216,6 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
     if (payload_len > 4) {
         resultset_packet_length = uint3korr(payload);
         if (resultset_packet_length + 4 < payload_len) {
-            ASSERT(resultset_packet_length < 100);
             //printf("-------length %d number -------%d\n", resultset_packet_length, *(payload + 3));
             /* resultset */
             return resultset_packet(payload + 4 + resultset_packet_length,
@@ -229,7 +235,6 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
     (*lastData)[payload_len] = 0;
     *lastDataSize = payload_len;
     *lastNum = num;
-    ASSERT(resultset_packet_length < 100);
 
     /*
     uchar *p; 
@@ -246,10 +251,7 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
 
 ulong 
 ok_packet(char *payload, uint32 payload_len) {
-
-    /* packet length has parsed, so skip*/
-    /* TODO no conclude len, possible codedump */
-    return net_field_length(payload + 5);
+    return OK;
 }
 
 ulong 
@@ -306,8 +308,7 @@ static void store_param_null(char *buff) {
 
 static void store_param_tinyint(char *buff, char *param) {            
 
-    char c = *(uchar *) param;
-    sprintf(buff + strlen(buff), "%c,", c);
+    sprintf(buff + strlen(buff), "%d,", param[0]);
 }
 
 static void store_param_short(char *buff, char *param) {           
@@ -357,20 +358,48 @@ static int store_param_str(char *buff, char *param) {
     datetime = timestamp
 
     date is only 5bytes
+
+
+    11 bytes:
+        year[2]
+        month[1]
+        day[1]
+        hour[1]
+        minute[1]
+        second[1]
+        second_part[4]
+    7 bytes:
+        year[2]
+        month[1]
+        day[1]
+        hour[1]
+        minute[1]
+        second[1]
+    4 bytes:
+        year[2]
+        month[1]
+        day[1]
 */
 
 static int store_param_datetime(char* buffer, char *param) {
 
     char length = *param;
-    ASSERT((length == 11) || (length == 4));
+    ASSERT((length == 11) || (length == 4) || (length == 7));
 
     int year = uint2korr(param+1);
+    int second_part ;
 
     if (length == 11) { 
+        second_part = uint4korr(param + 8);
+        /* TODO 30 is need modifed */
+        snprintf(buffer + strlen(buffer), 30,"%d-%d-%d %d:%d:%d %d,",
+            year, *(param+3), *(param+4), 
+            *(param+5), *(param+6), *(param+7), second_part);
+    } else if (length == 7) {
         snprintf(buffer + strlen(buffer), 21,"%d-%d-%d %d:%d:%d,",
             year, *(param+3), *(param+4), 
             *(param+5), *(param+6), *(param+7));
-    } else {
+    } else if (length == 4) {
         snprintf(buffer + strlen(buffer), 12,"%d-%d-%d,",
             year, *(param+3), *(param+4));
     }
@@ -378,17 +407,42 @@ static int store_param_datetime(char* buffer, char *param) {
     return length + 1;
 }
 
+/*
+    12
+        neg[1]
+        day[4]
+        hour[1]
+        minute[1]
+        second[1]
+        second_part[4]
+    8
+        neg[1]
+        day[4]
+        hour[1]
+        minute[1]
+        second[1]
+
+*/
 static int 
 store_param_time(char* buffer, char *param) {
 
     char length = *param;
+    int day, second_part;
 
-    ASSERT(length == 12);
+    ASSERT((length == 12) || (length == 8) || (length == 0));
 
-    int day = uint4korr(param+2); //skip length and neg
-
-    snprintf(buffer + strlen(buffer), 15,"%d %d:%d:%d,",
-        day, *(param+6), *(param+7), *(param+8));
+    if (length == 12) {
+        day = uint4korr(param+2); //skip length and neg
+        second_part = uint4korr(param+9); 
+        snprintf(buffer + strlen(buffer), 20,"%d %d:%d:%d %d",
+            day, *(param+6), *(param+7), *(param+8), second_part);
+    } else if (length == 8) {
+        day = uint4korr(param+2); //skip length and neg
+        snprintf(buffer + strlen(buffer), 15,"%d %d:%d:%d",
+            day, *(param+6), *(param+7), *(param+8));
+    } else {
+        snprintf(buffer + strlen(buffer), 3,"%s,"," ");
+    }
     return length + 1;
 }
 

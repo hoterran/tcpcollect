@@ -21,7 +21,7 @@ libpcap: dummy
 
 mysqlpcap:LOADLIBES += libpcap/libpcap.a
 mysqlpcap:CFLAGS += -Ilibpcap -DDEBUG
-mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o adlist.o utils.o
+mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o utils.o
 
 #mysqlpcap:LOADLIBES += lib/libpcap.a lib/libpfring.a -lpthread
 #mysqlpcap:CFLAGS += -Ilibpcap-pfring

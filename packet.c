@@ -306,10 +306,9 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 lport, rport, tv, sql, cmd, NULL, AfterPreparePacket);
         } else if (unlikely(cmd == COM_STMT_CLOSE)) {
 
-            /* close param_type, param */
+            /* #TODO, only remove stmt_id, not session */
             dump(L_DEBUG, "stmt close packet %s %d", sql, cmd);
-            hash_get_rem(mp->hash, dst, src, 
-                lport, rport, NULL, NULL, NULL);
+            //hash_get_rem(mp->hash, dst, src, lport, rport, NULL, NULL, NULL);
         } else if (unlikely(cmd == COM_STMT_EXECUTE)) {
             /*
              *  two state:
@@ -339,9 +338,11 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             if (param_count != ERR) {
                 ASSERT(param_count >= 0);
                 /* prepare cant find, param_type in payload */
-                new_param_type = parse_param(data, datalen, param_count, param_type, &param[0]);
-                ASSERT(param[0]);
-                if ((param_type == NULL) && (new_param_type == NULL)) {
+                if (param_count > 0)
+                    new_param_type = parse_param(data, datalen, param_count, param_type, &param[0]);
+
+                if (param_count > 0) ASSERT(param[0]);
+                if ((param_type == NULL) && (new_param_type == NULL) && (param_count > 0)) {
                     dump(L_DEBUG, "execute packet, but param_type cant find");
                     return ERR;
                 }
@@ -482,6 +483,7 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
         int stmt_id = ERR;
         int param_count = ERR;
 
+        /* only handle first packet, skip field packet and next */
         ret = parse_prepare_ok(data, datalen, &stmt_id, &param_count);
         ASSERT(ret == 0);
         ASSERT(stmt_id > 0);

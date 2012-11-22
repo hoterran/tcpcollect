@@ -20,7 +20,7 @@ void main(int argc, char **argv)
     my_bool is_null;
 
     mysql_init(&mysql);
-    if (!(sock = mysql_real_connect(&mysql, "127.0.0.1", "root", "root", "test", 3306, NULL, 0))) {
+    if (!(sock = mysql_real_connect(&mysql, "10.1.170.196", "root", "root", "test", 3306, NULL, 0))) {
         fprintf(stderr, "Couldn't connect to engine!\n%s\n\n", mysql_error(&mysql));
         perror("");
         exit(1);

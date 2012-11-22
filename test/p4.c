@@ -22,7 +22,7 @@ int main (int argc, char *argv[]) {
     mysql = mysql_init(NULL);
     mysql_options(mysql, MYSQL_OPT_RECONNECT, &reconnect);
  
-    mysql_real_connect(mysql, "127.0.0.1", "root", "root", "test", 3306, NULL, 0);
+    mysql_real_connect(mysql, "10.1.170.196", "root", "root", "test", 3306, NULL, 0);
 
     MYSQL_STMT    *stmt;
     MYSQL_BIND    bind[7];

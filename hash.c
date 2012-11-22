@@ -314,12 +314,11 @@ hash_set_param (struct hash *hash,
             session->next->rport == rport &&
             session->next->lport == lport
         ) {
-
             session->next->tcp_seq = 0;
 //            ASSERT(session->next->is_stmt);
             /* TODO need open below ASSERT */
             //ASSERT(session->next->stmt_id == stmt_id);
-            ASSERT(param_count);
+            ASSERT(param_count >= 0);
 
             session->next->tv = tv;
 
@@ -332,7 +331,7 @@ hash_set_param (struct hash *hash,
             }
 
             ASSERT(param);
-            ASSERT(strlen(param));
+            ASSERT(strlen(param) >= 0);
 
             int len = 0;
             if (NULL == session->next->param) {
@@ -347,7 +346,12 @@ hash_set_param (struct hash *hash,
                     free(session->next->param);
                 session->next->param = malloc(strlen(param) + 1);
             }
-            snprintf(session->next->param, strlen(param) + 1, "%s", param);
+            if (strlen(param) == 0) {
+                free(session->next->param);
+                session->next->param = NULL;
+            } else {
+                snprintf(session->next->param, strlen(param) + 1, "%s", param);
+            }
 
             session->next->status = AfterSqlPacket;
                 

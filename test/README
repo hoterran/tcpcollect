@@ -6,3 +6,12 @@
 2. 绑定变量各种类型，时间，字符串，blob
 3. 一个程序里两个绑定变量，交互执行
 4. 绑定变量在任何阶段，mysqlpcap 启动进入
+
+
+10.249.194.51
+
+admin/wangzy_2011
+
+/home/admin/legs/mysql-5.1.61/tests/mysql_client_test -htopmy.mysql.mysql.alibabalabs.com  -ujc04 -pa1234561  -Ddbjc01 -P3306 
+
+

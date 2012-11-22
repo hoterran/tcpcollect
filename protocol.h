@@ -23,12 +23,12 @@ enum enum_field_types { MYSQL_TYPE_DECIMAL, MYSQL_TYPE_TINY,
 
 int is_sql (char *payload, uint32 payload_len, char **user);
 
-int parse_sql(char *payload, uint32 payload_len, char** sql);
+int parse_sql(char *payload, uint32 payload_len, char **sql);
 
-ulong parse_result(char* payload, uint32 payload_len, 
-    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum);
+ulong parse_result(char *payload, uint32 payload_len, 
+    uchar **myLastData, size_t *myLastDataSize, ulong *myLastNum);
 
-char *parse_param(char *payload, uint32 payload_len, int param_count, 
+char* parse_param(char *payload, uint32 payload_len, int param_count, 
     char *param_type, char *param);
 
 int parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id);

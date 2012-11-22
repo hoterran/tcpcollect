@@ -4,4 +4,7 @@ all:
 	gcc -g -o p2 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p2.c
 	gcc -g -o p3 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p3.c
 	gcc -g -o p4 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p4.c
+	gcc -g -o p5 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p5.c
+	gcc -g -o p6 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p6.c
+	gcc -g -o p7 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p7.c
 
