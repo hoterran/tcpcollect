@@ -251,7 +251,7 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
 
 ulong 
 ok_packet(char *payload, uint32 payload_len) {
-    return OK;
+    return net_field_length(payload + 5);
 }
 
 ulong 
@@ -384,7 +384,7 @@ static int store_param_str(char *buff, char *param) {
 static int store_param_datetime(char* buffer, char *param) {
 
     char length = *param;
-    ASSERT((length == 11) || (length == 4) || (length == 7));
+    ASSERT((length == 11) || (length == 4) || (length == 7) || (length == 0));
 
     int year = uint2korr(param+1);
     int second_part ;
@@ -402,6 +402,8 @@ static int store_param_datetime(char* buffer, char *param) {
     } else if (length == 4) {
         snprintf(buffer + strlen(buffer), 12,"%d-%d-%d,",
             year, *(param+3), *(param+4));
+    } else {
+        snprintf(buffer + strlen(buffer), 3,"%s,", " ");
     }
 
     return length + 1;
