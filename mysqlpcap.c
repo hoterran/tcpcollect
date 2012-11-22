@@ -156,7 +156,7 @@ main (int argc, char **argv) {
     if (NULL == mp) return ERR;
 
     char ch;
-    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:l:"))) {
+    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:l:hz"))) {
         switch (ch) {
             case 'p' :
                 mp->mysqlPort = atoi(optarg);
@@ -176,6 +176,9 @@ main (int argc, char **argv) {
             case 'l':
                 mp->address = malloc(strlen(optarg) + 1);
                 snprintf(mp->address, strlen(optarg) + 1, "%s", optarg);
+                break;
+            case 'z':
+                mp->isShowSrcIp = 1;
                 break;
             case 'h' :
             default :

@@ -33,7 +33,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
 int 
 outbound(MysqlPcap *mp, char* data, uint32 datalen, 
-    uint16_t dport, uint16_t sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp);
+    uint16_t dport, uint16_t sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp, char *srcip);
 
 /*
     if dev has set, use it, else use 'any'
@@ -88,8 +88,15 @@ start_packet(MysqlPcap *mp) {
 
     pcap_freecode(&fcode);
 
-    dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "timestamp", "latency(us)", "rows", "user", "sql");
-    dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "---------", "-----------", "----", "----", "---");
+    if (mp->isShowSrcIp == 1) {
+        dump(L_OK, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s", 
+            "timestamp", "source ip ",    "latency(us)", "rows", "user", "sql");
+        dump(L_OK, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s", 
+            "---------", "---------------", "-----------", "----", "----", "---");
+    } else {
+        dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "timestamp", "latency(us)", "rows", "user", "sql");
+        dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "---------", "-----------", "----", "----", "---");
+    }
 
     pcap_loop(mp->pd, -1, process_packet, (u_char *)mp);
 
@@ -224,7 +231,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             /* ignore locate random port connect remote MySQL port */
             if (sport != mp->mysqlPort)
                 break;
-            outbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv, tcp); 
+            outbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv, tcp, src); 
         }
 
         
@@ -383,7 +390,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
 int 
 outbound(MysqlPcap *mp, char* data, uint32 datalen, 
-    uint16_t dport, uint16_t sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp) {
+    uint16_t dport, uint16_t sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp, char* srcip) {
 
     char *sql = NULL, *user = NULL;
     int cmd = ERR;
@@ -449,16 +456,25 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
             snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
-            dump(L_OK, "%-20.20s%-16ld%-10ld%-10.10s %s [%s]", tt,
-                latency, num, user, sql, value);
+            if (mp->isShowSrcIp == 1) {
+                dump(L_OK, "%-20.20s%-17.17s%-16ld%-10ld%-10.10s %s [%s]", tt,
+                    srcip, latency , num, user, sql, value);
+            } else {
+                dump(L_OK, "%-20.20s%-16ld%-10ld%-10.10s %s [%s]", tt,
+                    latency, num, user, sql, value);
+            }
         } else {
             // normal statement
             snprintf(tt, sizeof(tt), "%d:%d:%d:%ld", 
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
-            dump(L_OK, "%-20.20s%-16d%-10ld%-10.10s %s", tt,
-                //latency, num, user, sql);
-                latency, num, user, sql);
+            if (mp->isShowSrcIp == 1) {
+                dump(L_OK, "%-20.20s%-17.17s%-16d%-10ld%-10.10s %s", tt,
+                    srcip, latency, num, user, sql);
+            } else {
+                dump(L_OK, "%-20.20s%-16d%-10ld%-10.10s %s", tt,
+                    latency, num, user, sql);
+            }
         }
         //hash_print(mp->hash); 
     } else if (0 == status) {

@@ -28,6 +28,7 @@ typedef struct _MysqlPcap {
     void*       al;
     void*       hash;
     char*       address;
+    int         isShowSrcIp;
 } MysqlPcap;
 
 #endif
