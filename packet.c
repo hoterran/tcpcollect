@@ -308,6 +308,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             ASSERT(ret > 0);
             ASSERT(ret == cmd);
             ASSERT(sql);
+            ASSERT(strlen(sql) > 0);
             dump(L_DEBUG, "prepare packet %s %d", sql, cmd);
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, sql, cmd, NULL, AfterPreparePacket);
@@ -362,17 +363,25 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 return OK;
             }
         } else if (unlikely(cmd == COM_BINLOG_DUMP)) {
-            dump(L_DEBUG, "binlog dump", sql, cmd);
+            dump(L_DEBUG, "binlog dump");
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, "binlog dump", cmd, NULL, AfterSqlPacket);
+        } else if (unlikely(cmd == COM_SET_OPTION)) {
+            dump(L_DEBUG, "set option");
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, "set option", cmd, NULL, AfterSqlPacket);
         } else if (likely(cmd >= 0)) {
             /* COM_QUERY */
             ret = parse_sql(data, datalen, &sql);
-            ASSERT(ret > 0);
-            ASSERT(sql);
-            dump(L_DEBUG, "sql packet %s %d", sql, cmd);
-            hash_set(mp->hash, dst, src, 
-                lport, rport, tv, sql, cmd, NULL, AfterSqlPacket);
+            if (ret == -1) {
+                dump(L_DEBUG, "sql is too long big than a packet");
+            } else {
+                ASSERT(ret > 0);
+                ASSERT(sql);
+                dump(L_DEBUG, "sql packet [%s] %d", sql, cmd);
+                hash_set(mp->hash, dst, src, 
+                    lport, rport, tv, sql, cmd, NULL, AfterSqlPacket);
+            }
         } else {
             ASSERT(NULL);
             dump(L_ERR, "why here?");
@@ -417,9 +426,11 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
     /* TODO other hash_set must clear lastNum lastData, lastDataSize */
     int status = hash_get(mp->hash, src, dst,
         lport, rport, &tv2, &sql, &user, &value, &lastData, 
-        &lastDataSize, &lastNum, &tcp_seq);
+        &lastDataSize, &lastNum, &tcp_seq, &cmd);
 
     if (likely(AfterSqlPacket == status)) {
+        ASSERT(cmd > 0);
+        ASSERT(strlen(sql) > 0);
         if (*tcp_seq == 0) {
             *tcp_seq =ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "first receive packet");
@@ -452,7 +463,14 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
         long num;
         ulong latency;
 
-        num = parse_result(data, datalen, lastData, lastDataSize, lastNum);
+        if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION)) {
+            //eof packet or error packet, skip it 
+           num = 1;
+        } else {
+            //resultset packet
+           num = parse_result(data, datalen, lastData, lastDataSize, lastNum);
+        }
+
         ASSERT((num == -2) || (num >= 0) || (num == -1));
         latency = (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec);
         // resultset

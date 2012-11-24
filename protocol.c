@@ -109,6 +109,7 @@ parse_sql(char* payload, uint32 payload_len, char **sql) {
         *sql = &payload[5];
         return payload[4]; // cmd
     }
+    /* sql is too long */
     return -1;
 }
 
@@ -169,6 +170,7 @@ parse_result(char* payload, uint32 payload_len,
                 } else {
                     /* resultset */
                     ulong field_number = net_field_length(payload + 4);
+                    ASSERT(field_number < 50);
                     ulong field_lcb_length = lcb_length(payload + 4);
                     return field_packet(payload + 4 + field_lcb_length, 
                         payload_len - 4 - field_lcb_length, field_number);

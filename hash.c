@@ -94,7 +94,7 @@ int
 hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
          struct timeval *result, char **sql, char **user, char **value,
-         uchar ***lastData, size_t **lastDataSize, ulong **lastNum, uint **tcp_seq)
+         uchar ***lastData, size_t **lastDataSize, ulong **lastNum, uint **tcp_seq, int *cmd)
 {
     struct session *session;
     unsigned long port;
@@ -117,6 +117,7 @@ hash_get(struct hash *hash,
             *lastDataSize = &(session->next->lastDataSize);
             *lastNum = &(session->next->lastNum);
             *tcp_seq = &(session->next->tcp_seq);
+            *cmd = session->next->cmd;
 
             return session->next->status;
         }
