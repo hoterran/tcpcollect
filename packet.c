@@ -370,6 +370,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "binlog dump");
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, "binlog dump", cmd, NULL, AfterSqlPacket);
+        } else if (unlikely(cmd == COM_STATISTICS)) {
+            dump(L_DEBUG, "statistics");
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, "statistics", cmd, NULL, AfterSqlPacket);
         } else if (unlikely(cmd == COM_SET_OPTION)) {
             dump(L_DEBUG, "set option");
             hash_set(mp->hash, dst, src, 
@@ -467,7 +471,9 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
         long num;
         ulong latency;
 
-        if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)) {
+        if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)
+            || (COM_STATISTICS) 
+        ) {
             //eof packet or error packet, skip it 
            num = 1;
         } else {
