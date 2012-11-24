@@ -428,6 +428,11 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
                 //printf("continue packet expect is %u, now is %u \n", *tcp_seq, ntohl(tcp->seq)); 
                 *tcp_seq = ntohl(tcp->seq) + datalen;
             } else {
+                if (*tcp_seq > ntohl(tcp->seq)) {
+                    //bond repeat packet
+                    return ERR;
+                }
+
                 struct pcap_stat ps;
                 pcap_stats(mp->pd, &ps);
                 dump(L_ERR, " error packet expect %u but %u drops:%u", *tcp_seq , ntohl(tcp->seq), ps.ps_drop); 

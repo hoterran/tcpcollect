@@ -58,6 +58,7 @@ sql 在前面，方括号里为具体的值。
 * keyword filter
 * output threading
 * pf_ring
+* multi stmt
 
 ##DONE
 
@@ -69,9 +70,9 @@ sql 在前面，方括号里为具体的值。
 * prepare
 * multi session big resultset
 * support bond netcard
-
-
-##bug fix
- * ignore remote MySQL port connect me random port, data, for example: replication,
- * ignore me connect rmeote MySQL data
-
+* support show src ip (-z)
+* support drop packet and chao order packet
+* ignore remote MySQL port connect me random port, data, for example: replication,
+* ignore me connect rmeote MySQL data
+* support specify detail ip (-l)
+* support bond card repeat packet(same seq)
