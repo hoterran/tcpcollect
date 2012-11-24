@@ -362,6 +362,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 dump(L_DEBUG, " stmt, but start pcap too late");
                 return OK;
             }
+        } else if (unlikely(cmd == COM_PING)) {
+            dump(L_DEBUG, "ping ");
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, "ping", cmd, NULL, AfterSqlPacket);
         } else if (unlikely(cmd == COM_BINLOG_DUMP)) {
             dump(L_DEBUG, "binlog dump");
             hash_set(mp->hash, dst, src, 
@@ -463,7 +467,7 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
         long num;
         ulong latency;
 
-        if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION)) {
+        if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)) {
             //eof packet or error packet, skip it 
            num = 1;
         } else {
