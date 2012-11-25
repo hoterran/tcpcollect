@@ -6,11 +6,11 @@
 #include <sys/time.h>
 #include <string.h>
 
+#include "utils.h"
 #include "mysqlpcap.h"
 #include "protocol.h"
 #include "hash.h"
 #include "log.h"
-#include "utils.h"
 
 #define INITIAL_HASH_SZ     2053
 #define MAX_LOAD_PERCENT    65
@@ -31,7 +31,7 @@ struct session {
     uchar *lastData;
     size_t lastDataSize;
     ulong lastNum;
-    uint  tcp_seq;
+    uint32_t  tcp_seq;
     
     struct session *next;
 
@@ -81,7 +81,10 @@ hash_new(void) {
     memset(ret->sessions, 0, ret->sz * sizeof(struct session));
     
     return ret;
-    
+}
+int
+hash_free(struct hash* hs) {
+    return 0;
 }
 
 void

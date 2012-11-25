@@ -20,7 +20,6 @@ get_addresses() {
     AddressList *al = malloc(sizeof(AddressList));
     AddressList *head = al;
 
-
     pcap_if_t *devlist, *curr;
     pcap_addr_t *addr;
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -64,11 +63,8 @@ get_addresses() {
                 al->next->in_addr = sin->sin_addr;
                 al->next->next = NULL;
                 al= al->next;
-                
             }
-            
         }
-        
     }
     
     pcap_freealldevs(devlist);

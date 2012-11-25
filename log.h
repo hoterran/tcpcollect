@@ -1,4 +1,5 @@
-
+#ifndef _LOG_H_
+#define _LOG_H_
 
 /*
  syslog.h
@@ -17,10 +18,10 @@
 #define L_INFO  6
 #define L_DEBUG 7 
 
+void log_init(const char *prefix, const char *format, const char *suffix);
+
 #define dump(x,y...)    _log(#x, x, ##y)
 
-void 
-log_init(const char *prefix, const char *format, const char *suffix);
+void _log(const char *levelstring, int level, const char *fmt, ...);
 
-void 
-_log(const char *levelstring, int level, const char *fmt, ...);
+#endif

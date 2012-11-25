@@ -34,6 +34,8 @@ struct hash;
 
 struct hash *hash_new(void);
 void hash_del(struct hash *hash);
+int hash_free(struct hash *hash);
+
 int hash_get(struct hash *hash,
     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
     struct timeval *result, char **sql, char **user, char **value,

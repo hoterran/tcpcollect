@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "log.h"
 #include "utils.h"
+#include "log.h"
 #include "mysqlpcap.h"
 #include "protocol.h"
 
@@ -500,7 +500,7 @@ parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id) {
 
 char *
 parse_param(char *payload, uint32 payload_len, int param_count, 
-    char *param_type, char *param) {
+    char *param_type, char *param, size_t param_len) {
 
     int packet_length = uint3korr(payload);
     int pos = 4;
@@ -536,7 +536,7 @@ parse_param(char *payload, uint32 payload_len, int param_count,
                 store_param_null(param);
                 continue;
             }
-
+            // TODO use param_len 
             switch (type) {
                 case MYSQL_TYPE_NULL:
                 store_param_null(param);
