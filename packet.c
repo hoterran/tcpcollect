@@ -216,7 +216,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             /* ignore locate random port connect remote MySQL port */
             if (sport != mp->mysqlPort)
                 break;
-            outbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv, tcp, src); 
+            outbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv, tcp, dst); 
         }
         
         /* internal 
@@ -418,7 +418,6 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
 
     if (likely(AfterSqlPacket == status)) {
         ASSERT(cmd > 0);
-        ASSERT((cmd == COM_QUERY) || (cmd == COM_STMT_EXECUTE)); /* TODO */
         ASSERT(strlen(sql) > 0);
         if (*tcp_seq == 0) {
             *tcp_seq =ntohl(tcp->seq) + datalen;
