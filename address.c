@@ -1,12 +1,11 @@
-
 #include <pcap.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "log.h"
 #include "address.h"
 
 struct address_list {
@@ -30,17 +29,27 @@ get_addresses() {
     }
     
     for (curr = devlist; curr; curr = curr->next) {
-//        if (curr->flags & PCAP_IF_LOOPBACK)
- //           continue;
+        //if (curr->flags & PCAP_IF_LOOPBACK)
+        //  continue;
 
-        //printf("%s-%s-%p-%d\n", curr->name, curr->description, 
-          //  curr->addresses, curr->flags);
+        /*
+         dev_name: eth0         desc:(null)     flags:0
+         dev_name: bond0        desc:(null)     flags:0
+                10.249.252.65
+                10.249.252.71
+                0.0.0.0
+         dev_name: eth1         desc:(null)     flags:0
+         dev_name: any  desc:Pseudo-device that captures on all interfaces      flags:0
+         dev_name: lo   desc:(null)     flags:1
+                127.0.0.1
+                0.0.0.0
+        */
+
+        dump(L_DEBUG, "dev_name: %s\t desc:%s\t flags:%d", curr->name, curr->description, 
+            curr->flags);
 
         for (addr = curr->addresses; addr; addr = addr->next) {
             struct sockaddr *realaddr;
-
-            //printf("\t %d %s \n", ((struct sockaddr_in *) addr->addr)->sin_addr.s_addr,
-           //     inet_ntoa(((struct sockaddr_in *)addr->addr)->sin_addr));
 
             if (addr->addr)
                 realaddr = addr->addr;
@@ -48,14 +57,18 @@ get_addresses() {
                 realaddr = addr->dstaddr;
             else
                 continue;
-            
+
             if (realaddr->sa_family == AF_INET || 
                 realaddr->sa_family == AF_INET6) {
 
                 struct sockaddr_in *sin;
                 
                 sin = (struct sockaddr_in *) realaddr;
-                
+            
+                if (0 == sin->sin_addr.s_addr)
+                    continue;
+                dump(L_DEBUG, "\t %s ", inet_ntoa(sin->sin_addr));
+
                 al->next = malloc(sizeof(AddressList));
                 if (!al->next)
                     abort();
