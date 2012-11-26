@@ -275,7 +275,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
         /* COM_ packet */
         cmd = data[4];
-        ASSERT(cmd > 0);
+        ASSERT(cmd >= 0);
 
         if (unlikely(cmd == COM_QUIT)) {
 
@@ -342,6 +342,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 dump(L_DEBUG, " stmt, but start pcap too late");
                 return OK;
             }
+        } else if (unlikely(cmd == COM_SLEEP)) {
+            dump(L_DEBUG, "sleep ");
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, "sleep", cmd, NULL, AfterSqlPacket);
         } else if (unlikely(cmd == COM_PING)) {
             dump(L_DEBUG, "ping ");
             hash_set(mp->hash, dst, src, 
@@ -358,7 +362,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "set option");
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, "set option", cmd, NULL, AfterSqlPacket);
-        } else if (likely(cmd >= 0)) {
+        } else if (likely(cmd > 0)) {
             /* COM_QUERY */
             ret = parse_sql(data, datalen, &sql);
             if (ret == -1) {
@@ -416,9 +420,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         lport, rport, &tv2, &sql, &user, &value, &lastData, 
         &lastDataSize, &lastNum, &tcp_seq, &cmd);
 
-    if (likely(AfterSqlPacket == status)) {
-        ASSERT(cmd > 0);
-        ASSERT(strlen(sql) > 0);
+    if (status > 0) {
         if (*tcp_seq == 0) {
             *tcp_seq =ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "first receive packet");
@@ -447,12 +449,17 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 return ERR;
             }
         }
+    }
+
+    if (likely(AfterSqlPacket == status)) {
+        ASSERT(cmd >= 0);
+        ASSERT(strlen(sql) > 0);
 
         long num;
         ulong latency;
 
         if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)
-            || (cmd == COM_STATISTICS)) {
+            || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP)) {
             //eof packet or error packet, skip it 
            num = 1;
         } else {

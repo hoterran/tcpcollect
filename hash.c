@@ -276,7 +276,7 @@ hash_set_param_count(struct hash *hash,
             session->next->lport == lport
         ) {
 
-            session->next->tcp_seq = 0;
+//            session->next->tcp_seq = 0;
 //            ASSERT(session->next->is_stmt);
             session->next->stmt_id = stmt_id;
 
@@ -318,7 +318,7 @@ hash_set_param (struct hash *hash,
             session->next->rport == rport &&
             session->next->lport == lport
         ) {
-            session->next->tcp_seq = 0;
+//            session->next->tcp_seq = 0;
 //            ASSERT(session->next->is_stmt);
             /* TODO need open below ASSERT */
             //ASSERT(session->next->stmt_id == stmt_id);
@@ -382,7 +382,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->rport == rport &&
             session->next->lport == lport
         ) {
-            session->next->tcp_seq = 0;
+//            session->next->tcp_seq = 0;
             if (session->next->param) {
                 free(session->next->param);
                 session->next->param = NULL; // prepare then a normal sql, need remove this
