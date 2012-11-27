@@ -55,8 +55,7 @@ void log_change_filename(time_t t) {
  */
 
 /* use signal change level */
-void 
-sigusr1_handler() {
+void log_change_level() {
     if (G_log.level == L_OK)
         G_log.level = L_DEBUG;
     else 
@@ -74,7 +73,7 @@ log_init(const char *prefix, const char *format, const char *suffix) {
     }
 
     struct sigaction act;
-    act.sa_handler = sigusr1_handler;
+    act.sa_handler = log_change_level;
     act.sa_flags = SA_RESTART;
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask, SIGUSR1);

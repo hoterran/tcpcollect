@@ -28,6 +28,7 @@ void init(MysqlPcap *mp) {
 int main (int argc, char **argv) {
 
     log_init("mysqlpcap", NULL, ".log");
+    log_change_level();
 
     char usage[] = "Usage: \n\tmysqlpcap -p [port] mysql listen port default 3306\n"
                     "\t -d daemon default no\n "

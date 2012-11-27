@@ -24,4 +24,6 @@ void log_init(const char *prefix, const char *format, const char *suffix);
 
 void _log(const char *levelstring, int level, const char *fmt, ...);
 
+void log_change_level();
+
 #endif
