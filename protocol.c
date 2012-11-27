@@ -225,7 +225,9 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
         } else if (resultset_packet_length + 4 == payload_len) {
             uchar c = payload[4];
             if (c == 0xfe)
-                return num;
+                return num; 
+            else if (c == 0xff) 
+                return error_packet(payload, payload_len); 
         }
     }
 
