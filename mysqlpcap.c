@@ -10,6 +10,8 @@
 #include "packet.h"
 #include "address.h"
 #include "hash.h"
+#include "adlist.h"
+#include "user.h"
 
 void init(MysqlPcap *mp) {
     if (mp->mysqlPort == 0) 
@@ -36,6 +38,8 @@ int main (int argc, char **argv) {
                     "\t -i [dev] (eth* card use this)\n"
                     "\t -l address1,address2 (bond card or use this)\n"
                     "\t -z show source ip\n"
+                    "\t -u focus user, sperated by comma, default null, example: user1, user2, conflict with -n \n"
+                    "\t -n filter user, format same as above but conflict with -u\n"
                     "\t -h help";
 
     MysqlPcap *mp = calloc(1, sizeof(*mp));
@@ -43,7 +47,7 @@ int main (int argc, char **argv) {
     if (NULL == mp) return ERR;
 
     char ch;
-    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:l:hz"))) {
+    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:l:hz:u:n:"))) {
         switch (ch) {
             case 'p' :
                 mp->mysqlPort = atoi(optarg);
@@ -59,6 +63,22 @@ int main (int argc, char **argv) {
                 break;
             case 'i' :
                 snprintf(mp->netDev, sizeof(mp->netDev), "%s", optarg); 
+                break; 
+            case 'u' :
+                if (mp->filterUser) {
+                    printf("-u conflict with -n\n"); 
+                    return ERR;
+                }
+                mp->focusUser = listCreate();
+                initUserList(mp->focusUser, optarg);
+                break; 
+            case 'n' :
+                if (mp->focusUser) {
+                    printf("-n conflict with -u\n"); 
+                    return ERR;
+                }
+                mp->filterUser = listCreate();
+                initUserList(mp->filterUser, optarg);
                 break; 
             case 'l':
                 mp->address = malloc(strlen(optarg) + 1);

@@ -21,7 +21,7 @@ libpcap: dummy
 
 mysqlpcap:LOADLIBES += libpcap/libpcap.a
 mysqlpcap:CFLAGS += -Ilibpcap -DDEBUG
-mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o utils.o
+mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o utils.o adlist.o user.o
 
 #mysqlpcap:LOADLIBES += lib/libpcap.a lib/libpfring.a -lpthread
 #mysqlpcap:CFLAGS += -Ilibpcap-pfring
@@ -35,3 +35,11 @@ install:$(TARGET)
 	$(INSTALL) $(TARGET) $(BINDIR)
 
 dummy:
+
+
+
+test:user_test
+	./user_test
+
+user_test: user.c
+	gcc -g -o user_test -D_USER_TEST_ -DDEBUG user.c log.c utils.c adlist.c

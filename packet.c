@@ -327,7 +327,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 ASSERT(param_count >= 0);
                 /* prepare cant find, param_type in payload */
                 if (param_count > 0)
-                    new_param_type = parse_param(data, datalen, param_count, param_type, &param[0], sizeof(param));
+                    new_param_type = parse_param(data, datalen, param_count, param_type, param, sizeof(param));
 
                 if (param_count > 0) ASSERT(param[0]);
                 if ((param_type == NULL) && (new_param_type == NULL) && (param_count > 0)) {
@@ -370,6 +370,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             } else {
                 ASSERT(ret > 0);
                 ASSERT(sql);
+                ASSERT(strlen(sql)>0);
                 dump(L_DEBUG, "sql packet [%s] %d", sql, cmd);
                 hash_set(mp->hash, dst, src, 
                     lport, rport, tv, sql, cmd, NULL, AfterSqlPacket);
@@ -454,6 +455,21 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     if (likely(AfterSqlPacket == status)) {
         ASSERT(cmd >= 0);
         ASSERT(strlen(sql) > 0);
+
+        if (user) {
+            if (mp->focusUser) {
+                if (NULL == listSearchKey(mp->focusUser, user)) {
+                    dump(L_DEBUG, "user:%s is not in focus", user);
+                    return ERR; 
+                }
+            }
+            if (mp->filterUser) {
+                if (listSearchKey(mp->filterUser, user)) {
+                    dump(L_DEBUG, "user:%s is in filter", user); 
+                    return ERR;
+                }
+            }
+        }
 
         long num;
         ulong latency;
