@@ -12,17 +12,23 @@ mysqlpcap 是一个基于 pcap 用于观察 sql 语句执行情况的工具。�
 
 	make
 
-
 ##use
 
 	sudo ./mysqlpcap
 
 ![use](https://raw.github.com/hoterran/tcpcollect/master/mysqlpcap.png)
 
+## 只抓取某个用户的sql，逗号分割
+	sudo ./mysqlpcap -u root,user1
 
-如果机器上的网卡是 ``bond``，则需要指定具体的``ip``
+## 过滤某些用户的sql，逗号分割
+	sudo ./mysqlpcap -n user1,user2
 
-	sudo ./mysqlpcap -l 1.2.3.4, 5.6.7.8
+## 针对某个ip的sql的抓取
+	sudo ./mysqlpcap -l 1.1.1.1
+
+## 针对某个port的sql抓取
+	sudo ./mysqlpcap -p 3001
 
 ##output format
 
@@ -76,3 +82,4 @@ sql 在前面，方括号里为具体的值。
 * ignore me connect rmeote MySQL data
 * support specify detail ip (-l)
 * support bond card repeat packet(same seq)
+* support user level sql capture
