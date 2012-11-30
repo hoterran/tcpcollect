@@ -170,7 +170,7 @@ parse_result(char* payload, uint32 payload_len,
                 } else {
                     /* resultset */
                     ulong field_number = net_field_length(payload + 4);
-                    ASSERT(field_number < 100);
+                    ASSERT(field_number < 50);
                     ulong field_lcb_length = lcb_length(payload + 4);
                     return field_packet(payload + 4 + field_lcb_length, 
                         payload_len - 4 - field_lcb_length, field_number);
@@ -225,9 +225,7 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
         } else if (resultset_packet_length + 4 == payload_len) {
             uchar c = payload[4];
             if (c == 0xfe)
-                return num; 
-            else if (c == 0xff) 
-                return error_packet(payload, payload_len); 
+                return num;
         }
     }
 
