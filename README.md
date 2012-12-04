@@ -66,7 +66,7 @@ sql 在前面，方括号里为具体的值。
 * pf_ring
 * multi stmt
 
-##DONE
+##changelog
 
 * user
 * latency
@@ -83,3 +83,6 @@ sql 在前面，方括号里为具体的值。
 * support specify detail ip (-l)
 * support bond card repeat packet(same seq)
 * support user level sql capture
+
+##version
+0.01

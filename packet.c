@@ -47,9 +47,9 @@ start_packet(MysqlPcap *mp) {
 
     struct bpf_program fcode;
     char ebuf[PCAP_ERRBUF_SIZE];
+    int ret;
 
-    mp->pd = pcap_open_live(mp->netDev, CAP_LEN, 0, 0, ebuf);
-              
+    mp->pd = pcap_create(mp->netDev, ebuf);
     if (NULL == mp->pd) {
         dump(L_ERR, "pcap_open_live error: %s - %s", mp->netDev, ebuf);
         return ERR;
@@ -60,11 +60,20 @@ start_packet(MysqlPcap *mp) {
         return ERR;
     }
 
-    snprintf(mp->filter, sizeof(mp->filter), 
-        "tcp port %d and tcp[tcpflags] & (tcp-push|tcp-ack) != 0", mp->mysqlPort);
+    ret = pcap_set_snaplen(mp->pd, CAP_LEN);
+    ASSERT(ret == 0);
+    ret = pcap_set_timeout(mp->pd, 0);
+    ASSERT(ret == 0);
 
     /* set pcap buffer size is 32m, decline drop percentage */
-    pcap_set_buffer_size(mp->pd, 1024 * 1024 * 32);
+    ret = pcap_set_buffer_size(mp->pd, 1024 * 1024 * 32);
+    ASSERT(ret == 0);
+
+    ret = pcap_activate(mp->pd);
+    ASSERT(ret >= 0);
+
+    snprintf(mp->filter, sizeof(mp->filter), 
+        "tcp port %d and tcp[tcpflags] & (tcp-push|tcp-ack) != 0", mp->mysqlPort);
 
     if (pcap_compile(mp->pd, &fcode, mp->filter, 0, mp->netmask) < 0) {
         dump(L_ERR, "pcap_compile failed: %s", pcap_geterr(mp->pd));
@@ -91,6 +100,7 @@ start_packet(MysqlPcap *mp) {
         dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "timestamp", "latency(us)", "rows", "user", "sql");
         dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "---------", "-----------", "----", "----", "---");
     }
+
 
     pcap_loop(mp->pd, -1, process_packet, (u_char*)mp);
 
