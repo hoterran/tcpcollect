@@ -9,6 +9,7 @@
 #include <pcap.h>
 #include <pcap/sll.h>
 #include <time.h>
+#include <signal.h>
 
 #include "utils.h"
 #include "log.h"
@@ -42,12 +43,26 @@ outbound(MysqlPcap *mp, char* data, uint32 datalen,
     if dev not exists use 'any'
 */
 
+char GoutputPacketStatus = '0';
+
+void sigusr1_handler(int sig) {
+    if (sig == SIGUSR1) GoutputPacketStatus = '1';
+}
+
 int
 start_packet(MysqlPcap *mp) {
 
     struct bpf_program fcode;
     char ebuf[PCAP_ERRBUF_SIZE];
     int ret;
+
+    struct sigaction act;    
+
+    act.sa_handler = sigusr1_handler;
+    act.sa_flags = SA_RESTART;
+    sigemptyset(&act.sa_mask);
+    sigaddset(&act.sa_mask, SIGUSR1);
+    sigaction(SIGUSR1, &act, NULL);
 
     mp->pd = pcap_create(mp->netDev, ebuf);
     if (NULL == mp->pd) {
@@ -154,6 +169,13 @@ process_packet(u_char *user, const struct pcap_pkthdr *header,
     if (packet_type != ETHERTYPE_IP)
         return;
 
+
+    if (GoutputPacketStatus == '1') {
+        struct pcap_stat ps;
+        pcap_stats(mp->pd, &ps);
+        dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop); 
+        GoutputPacketStatus = '0'; 
+    }
     process_ip(mp, ip, header->ts);
 }
 
