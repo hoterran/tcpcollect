@@ -528,19 +528,19 @@ hash_set_internal(struct session *sessions, unsigned long sz,
                 session->next->param = NULL; // prepare then a normal sql, need remove this
             }
             session->next->tv = value;
-            sqlLen = strlen(sql) ;
-            sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
-            if (sqlLen == SQL_MAX_LEN) {
-                sql[SQL_MAX_LEN - 1] = '.'; 
-                sql[SQL_MAX_LEN - 2] = '.'; 
-                sql[SQL_MAX_LEN - 3] = '.'; 
-            }
 
             if (session->next->sql) {
                 free(session->next->sql);
                 session->next->sql = NULL;
             }
             if (sql) {
+                sqlLen = strlen(sql) ;
+                sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
+                if (sqlLen == SQL_MAX_LEN) {
+                    sql[SQL_MAX_LEN - 1] = '.'; 
+                    sql[SQL_MAX_LEN - 2] = '.'; 
+                    sql[SQL_MAX_LEN - 3] = '.'; 
+                }
                 session->next->sql = malloc(sqlLen + 1);
                 snprintf(session->next->sql, sqlLen + 1, "%s", sql);
             }
@@ -575,14 +575,14 @@ hash_set_internal(struct session *sessions, unsigned long sz,
 
     session->next->tv = value;
 
-    sqlLen = strlen(sql) ;
-    sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
-    if (sqlLen == SQL_MAX_LEN) {
-        sql[SQL_MAX_LEN - 1] = '.'; 
-        sql[SQL_MAX_LEN - 2] = '.'; 
-        sql[SQL_MAX_LEN - 3] = '.'; 
-    }
     if (sql) {
+        sqlLen = strlen(sql) ;
+        sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
+        if (sqlLen == SQL_MAX_LEN) {
+            sql[SQL_MAX_LEN - 1] = '.'; 
+            sql[SQL_MAX_LEN - 2] = '.'; 
+            sql[SQL_MAX_LEN - 3] = '.'; 
+        }
         session->next->sql = malloc(sqlLen + 1);
         snprintf(session->next->sql, sqlLen + 1, "%s", sql);
     }

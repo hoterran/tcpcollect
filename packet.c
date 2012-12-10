@@ -44,11 +44,6 @@ int
 outbound(MysqlPcap *mp, char* data, uint32 datalen, 
     uint16 dport, uint16 sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp, char *srcip);
 
-/*
-    if dev has set, use it, else use 'any'
-    if dev not exists use 'any'
-*/
-
 char GoutputPacketStatus = '0';
 
 void sigusr1_handler(int sig) {
@@ -61,6 +56,10 @@ void sigalarm_handler(int sig) {
     if (sig == SIGALRM) GreloadAddress = '1';
 }
 
+/*
+    if dev has set, use it, else use 'any'
+    if dev not exists use 'any'
+*/
 int
 start_packet(MysqlPcap *mp) {
 
@@ -76,14 +75,17 @@ start_packet(MysqlPcap *mp) {
     sigaddset(&act.sa_mask, SIGUSR1);
     sigaction(SIGUSR1, &act, NULL);
 
-    act.sa_handler = sigalarm_handler;
-    act.sa_flags = SA_RESTART;
-    sigemptyset(&act.sa_mask);
-    sigaddset(&act.sa_mask, SIGALRM);
-    sigaction(SIGALRM, &act, NULL);
+    /* if not specify address, would dynamic reload address */
+    if (NULL == mp->address) {
+        act.sa_handler = sigalarm_handler;
+        act.sa_flags = SA_RESTART;
+        sigemptyset(&act.sa_mask);
+        sigaddset(&act.sa_mask, SIGALRM);
+        sigaction(SIGALRM, &act, NULL);
 
-    //todo ALARM
-    alarm(60);
+        alarm(RELOAD_ADDRESS_INTERVAL);
+    }
+
 
     mp->pd = pcap_create(mp->netDev, ebuf);
     if (NULL == mp->pd) {
@@ -199,6 +201,7 @@ process_packet(u_char *user, const struct pcap_pkthdr *header,
     }
 
     if (GreloadAddress == '1') {
+        ASSERT(mp->address == NULL);
         GreloadAddress = '0';
 
         /* reload address TODO */
@@ -212,11 +215,11 @@ process_packet(u_char *user, const struct pcap_pkthdr *header,
         dump(L_DEBUG, " shrink mem");
         */
 
-        /* delete idle connection */
+        /* delete idle connection, default is mysql wait timeout */
         dump(L_DEBUG, " delete idle connection ");
-        hash_delete_idle(mp->hash, header->ts, 60);
+        hash_delete_idle(mp->hash, header->ts, 8 * RELOAD_ADDRESS_INTERVAL);
 
-        alarm(60);
+        alarm(RELOAD_ADDRESS_INTERVAL);
     }
     process_ip(mp, ip, header->ts);
 }
@@ -440,6 +443,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "set option");
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, "set option", cmd, NULL, 0, AfterSqlPacket);
+        } else if (unlikely(cmd == COM_SHUTDOWN)) {
+            dump(L_DEBUG, "shutdown");
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, "shutdown", cmd, NULL, 0, AfterSqlPacket);
         } else if (likely(cmd > 0)) {
             //ASSERT((cmd == COM_QUERY) || (cmd == COM_INIT_DB));
             ret = parse_sql(data, datalen, &sql, sqlSaveLen);
@@ -558,7 +565,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         ulong latency;
 
         if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)
-            || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP)) {
+            || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP) || (cmd == COM_SHUTDOWN)) {
             //eof packet or error packet, skip it 
            num = 1;
         } else {
