@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -14,6 +13,8 @@
 
 #define INITIAL_HASH_SZ     2053
 #define MAX_LOAD_PERCENT    65
+#define SQL_MAX_LEN         2048
+#define VALUE_MAX_LEN       1024
 
 /* 1: receive auth packet 2: recieve ok packet start work */
 
@@ -23,7 +24,8 @@ struct session {
     
     struct timeval tv;
 
-    char *sql;
+    char *sql; // maxsize SQL_MAX_LEN
+    uint32_t sqlSaveLen; 
     char *user;
     int cmd;
     enum SessionStatus status; 
@@ -47,16 +49,98 @@ struct session {
 
 struct hash {
     struct session *sessions;
-    
     unsigned long sz, count;
-        
 };
+
+
+typedef void (*funcp)(struct hash *hash, struct session *session, void *arg);
+
+static int hash_loop(struct hash *hash, funcp func, void *arg);
+
+static void funcp_print(struct hash *hash, struct session *session, void *arg) {
+    dump(L_OK, "user:%s-sql:%s", session->next->user, session->next->user);
+}
+
+static void funcp_del(struct hash *hash, struct session *session, void *arg) {
+    ASSERT(session->next);
+    struct session *next = session->next->next;
+    if (session->next->sql) {
+        free(session->next->sql);
+        session->next->sql = NULL;
+    }
+    if (session->next->user) {
+        free(session->next->user);
+        session->next->user = NULL;
+    }
+    if (session->next->param) {
+        free(session->next->param);
+        session->next->param = NULL;
+    }
+    if (session->next->param_type) {
+        free(session->next->param_type);
+        session->next->param_type = NULL;
+    }
+    if (session->next->lastData) {
+        free(session->next->lastData);
+        session->next->lastData = NULL;
+    }
+
+    free(session->next);
+    session->next = next;
+    
+    hash->count--;
+}
+
+struct Arg {time_t now; int idle_time;};
+
+/* hash record will delete if idle time longer than 300s */
+static void funcp_delete_idle(struct hash *hash, struct session *session, void *arg) {
+  
+    /* arg */ 
+    struct Arg *a = arg;
+    time_t now = a->now;
+    int idle_time = a->idle_time;
+   
+    time_t tv_t;
+    tv_t = session->next->tv.tv_sec;
+
+    /* compare */ 
+    if ( (now - tv_t) >= idle_time) {
+        dump(L_OK, "del this slot [user:%s]", session->next->user);
+        funcp_del(hash, session, NULL);
+    }
+}
+
+void hash_delete_idle(struct hash* hash, struct timeval tv, int idle_time) {
+    struct Arg a ;
+    a.now = tv.tv_sec;
+    a.idle_time = idle_time;
+    hash_loop(hash, funcp_delete_idle, (void*)&a);
+}
+
+void hash_print(struct hash* hash) {
+    hash_loop(hash, funcp_print, NULL);
+}
+
+/* general hash iterator */
+static int hash_loop(struct hash *hash, funcp func, void *arg) {
+    unsigned long i;
+    for (i = 0; i < hash->sz; i ++) {
+        struct session *session;
+       
+        for (session = hash->sessions + i; session && session->next;session = session->next) {
+            if (session->next) func(hash, session, arg);
+            
+        }
+    }
+    return 0;
+}
 
 static unsigned long
     hash_fun(uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport);
 static int hash_set_internal(struct session *sessions, unsigned long sz,
         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-        struct timeval tv, char *sql, int cmd, char *user, enum SessionStatus status);
+        struct timeval tv, char *sql, int cmd, char *user, uint32 sqlSaveLen, enum SessionStatus status);
 static int hash_load_check(struct hash *hash);
 static unsigned long hash_newsz(unsigned long sz);
     
@@ -92,6 +176,30 @@ hash_del(struct hash *hash) {
     free(hash->sessions);
     free(hash);
 }
+
+int hash_get_status(struct hash *hash,
+     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+     char **sql, uint32_t *sqlSaveLen) {
+
+    struct session *session;
+    unsigned long port;
+    
+    port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
+    for (session = hash->sessions + port; session->next; session = session->next)
+        if (
+            session->next->raddr == raddr &&
+            session->next->laddr == laddr &&
+            session->next->rport == rport &&
+            session->next->lport == lport
+        ) {
+            *sql = session->next->sql;
+            *sqlSaveLen = session->next->sqlSaveLen;
+
+            return session->next->status;
+        }
+        
+    return 0;
+ }
 
 int
 hash_get(struct hash *hash,
@@ -157,10 +265,16 @@ hash_get_rem(struct hash *hash,
             }
             if (session->next->param) {
                 free(session->next->param);
-
+                session->next->param = NULL;
             }
-            if (session->next->param_type)
+            if (session->next->param_type) {
                 free(session->next->param_type);
+                session->next->param_type = NULL;
+            }
+            if (session->next->lastData) {
+                free(session->next->lastData);
+                session->next->lastData = NULL;
+            }
 
             free(session->next);
             session->next = next;
@@ -176,12 +290,12 @@ hash_get_rem(struct hash *hash,
 int
 hash_set(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char *sql, int cmd, char *user, enum SessionStatus status)
+         struct timeval value, char *sql, int cmd, char *user, uint32_t sqlSaveLen, enum SessionStatus status)
 {
     hash_load_check(hash);
     
     if (hash_set_internal(hash->sessions, hash->sz,
-                             laddr, raddr, lport, rport, value, sql, cmd, user, status))
+                             laddr, raddr, lport, rport, value, sql, cmd, user, sqlSaveLen, status))
     {
         hash->count ++;
         return 1;
@@ -254,6 +368,30 @@ hash_get_param_count(struct hash *hash,
     return -1;
 }
 
+/* save stmt_id, param_count */
+int 
+hash_set_sql_len(struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+         uint32_t sqlSaveLen) {
+
+    struct session *session;
+    unsigned long port;
+    
+    port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
+
+    for (session = hash->sessions + port; session->next; session = session->next) {
+        if (
+            session->next->raddr == raddr &&
+            session->next->laddr == laddr &&
+            session->next->rport == rport &&
+            session->next->lport == lport
+        ) {
+            session->next->sqlSaveLen = sqlSaveLen; 
+            return 0;
+        }
+    }
+    return -1;
+}
 /* save stmt_id, param_count */
 int 
 hash_set_param_count(struct hash *hash,
@@ -368,10 +506,11 @@ hash_set_param (struct hash *hash,
 static int
 hash_set_internal(struct session *sessions, unsigned long sz,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char* sql, int cmd, char *user, enum SessionStatus status)
+         struct timeval value, char* sql, int cmd, char *user, uint32_t sqlSaveLen, enum SessionStatus status)
 {
     struct session *session;
     unsigned long port;
+    uint32_t sqlLen;
     
     port = hash_fun(laddr, raddr, lport, rport) % sz;
 
@@ -382,19 +521,28 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->rport == rport &&
             session->next->lport == lport
         ) {
+            session->next->sqlSaveLen = sqlSaveLen;
             if (status == AfterSqlPacket) session->next->tcp_seq = 0;
             if (session->next->param) {
                 free(session->next->param);
                 session->next->param = NULL; // prepare then a normal sql, need remove this
             }
             session->next->tv = value;
+            sqlLen = strlen(sql) ;
+            sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
+            if (sqlLen == SQL_MAX_LEN) {
+                sql[SQL_MAX_LEN - 1] = '.'; 
+                sql[SQL_MAX_LEN - 2] = '.'; 
+                sql[SQL_MAX_LEN - 3] = '.'; 
+            }
+
             if (session->next->sql) {
                 free(session->next->sql);
                 session->next->sql = NULL;
             }
             if (sql) {
-                session->next->sql = malloc(strlen(sql) + 1);
-                snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
+                session->next->sql = malloc(sqlLen + 1);
+                snprintf(session->next->sql, sqlLen + 1, "%s", sql);
             }
             session->next->cmd = cmd;
 
@@ -423,10 +571,20 @@ hash_set_internal(struct session *sessions, unsigned long sz,
     session->next->rport = rport;
     session->next->lport = lport;
     
+    session->next->sqlSaveLen = sqlSaveLen;
+
     session->next->tv = value;
+
+    sqlLen = strlen(sql) ;
+    sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
+    if (sqlLen == SQL_MAX_LEN) {
+        sql[SQL_MAX_LEN - 1] = '.'; 
+        sql[SQL_MAX_LEN - 2] = '.'; 
+        sql[SQL_MAX_LEN - 3] = '.'; 
+    }
     if (sql) {
-        session->next->sql = malloc(strlen(sql) + 1);
-        snprintf(session->next->sql, strlen(sql) + 1, "%s", sql);
+        session->next->sql = malloc(sqlLen + 1);
+        snprintf(session->next->sql, sqlLen + 1, "%s", sql);
     }
     session->next->cmd = cmd;
     
@@ -471,7 +629,7 @@ hash_load_check(struct hash *hash) {
                 
                 hash_set_internal(new_sessions, nsz, session->laddr,
                         session->raddr, session->lport, session->rport,
-                        session->tv, session->sql, session->cmd, session->user, session->status);
+                        session->tv, session->sql, session->cmd, session->user, session->sqlSaveLen ,session->status);
                         
             }
         }
@@ -502,20 +660,5 @@ hash_fun(uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport) {
 static unsigned long
 hash_newsz(unsigned long sz) {
     return sz * 2 + 1;
-}
-
-int
-hash_print(struct hash *hash) {
-    unsigned long i;
- 
-    for (i = 0; i < hash->sz; i ++) {
-        struct session *session;
-       
-        for (session = hash->sessions + i; session->next; session = session->next) {
-            dump(L_OK, "[%ld][%s]%s-", i, session->next->user, session->next->sql);
-        }
-    }
-    
-    return 0;
 }
 

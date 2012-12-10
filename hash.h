@@ -22,6 +22,7 @@
 #if !defined(STATS_HASH_H)
 #define STATS_HASH_H
 
+
 enum SessionStatus {    AfterAuthPacket = 1, 
                         AfterOkPacket,
                         AfterSqlPacket,
@@ -36,6 +37,10 @@ struct hash *hash_new(void);
 void hash_del(struct hash *hash);
 int hash_free(struct hash *hash);
 
+int hash_get_status(struct hash *hash,
+     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+     char **sql, uint32 *sqlSaveLen);
+
 int hash_get(struct hash *hash,
     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
     struct timeval *result, char **sql, char **user, char **value,
@@ -46,11 +51,18 @@ int hash_get_rem(struct hash *hash,
          struct timeval *result, char** sql, char **user);
 int hash_set(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char* sql, int cmd, char *user, enum SessionStatus status);
+         struct timeval value, char* sql, int cmd, char *user, uint32_t sqlSaveLen, enum SessionStatus status);
+
+int hash_set_sql_len(struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+         uint32_t sqlSaveLen);
          
 int hash_clean(struct hash *hash, unsigned long min);
 
-int hash_print(struct hash *hash);
+void hash_delete_idle(struct hash* hash, struct timeval tv, int idle_time);
+
+void hash_print(struct hash* hash);
+
 
 int
 hash_set_stmt (struct hash *hash, 

@@ -65,6 +65,7 @@ sql 在前面，方括号里为具体的值。
 * output threading
 * pf_ring
 * multi stmt
+* support shrink hash entry(free session->sql && session->size)
 
 ##changelog
 
@@ -75,14 +76,17 @@ sql 在前面，方括号里为具体的值。
 * log
 * prepare
 * multi session big resultset
-* support bond netcard
+* support bond netcard, fix libpcap bug
 * support show src ip (-z)
 * support drop packet and chao order packet
 * ignore remote MySQL port connect me random port, data, for example: replication,
 * ignore me connect rmeote MySQL data
 * support specify detail ip (-l)
 * support bond card repeat packet(same seq)
-* support user level sql capture
+* support user level sql capture, now can use parameter -u -n
+* support use signal SIGUSR1 inquire drop percentage 
+* support reload machine address 
+* support delete idle connection 
 
 ##version
 0.01

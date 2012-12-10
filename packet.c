@@ -10,6 +10,7 @@
 #include <pcap/sll.h>
 #include <time.h>
 #include <signal.h>
+#include <unistd.h>
 
 #include "utils.h"
 #include "log.h"
@@ -25,6 +26,11 @@
 
 /* prepare statement param value length */
 #define VALUE_SIZE 1024
+
+/* mysql wait_timeout default value */
+#define CONNECT_IDLE_TIME 8 * 3600 
+/* each interval, will reload current ip address */
+#define RELOAD_ADDRESS_INTERVAL 3600
 
 void process_packet(unsigned char *user, const struct pcap_pkthdr *header,
     const unsigned char *packet);
@@ -49,6 +55,12 @@ void sigusr1_handler(int sig) {
     if (sig == SIGUSR1) GoutputPacketStatus = '1';
 }
 
+char GreloadAddress = '0';
+
+void sigalarm_handler(int sig) {
+    if (sig == SIGALRM) GreloadAddress = '1';
+}
+
 int
 start_packet(MysqlPcap *mp) {
 
@@ -63,6 +75,15 @@ start_packet(MysqlPcap *mp) {
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask, SIGUSR1);
     sigaction(SIGUSR1, &act, NULL);
+
+    act.sa_handler = sigalarm_handler;
+    act.sa_flags = SA_RESTART;
+    sigemptyset(&act.sa_mask);
+    sigaddset(&act.sa_mask, SIGALRM);
+    sigaction(SIGALRM, &act, NULL);
+
+    //todo ALARM
+    alarm(60);
 
     mp->pd = pcap_create(mp->netDev, ebuf);
     if (NULL == mp->pd) {
@@ -116,7 +137,6 @@ start_packet(MysqlPcap *mp) {
         dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "---------", "-----------", "----", "----", "---");
     }
 
-
     pcap_loop(mp->pd, -1, process_packet, (u_char*)mp);
 
     pcap_close(mp->pd);
@@ -169,12 +189,34 @@ process_packet(u_char *user, const struct pcap_pkthdr *header,
     if (packet_type != ETHERTYPE_IP)
         return;
 
-
     if (GoutputPacketStatus == '1') {
+        GoutputPacketStatus = '0'; 
+        /*output packet */
         struct pcap_stat ps;
         pcap_stats(mp->pd, &ps);
         dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop); 
-        GoutputPacketStatus = '0'; 
+
+    }
+
+    if (GreloadAddress == '1') {
+        GreloadAddress = '0';
+
+        /* reload address TODO */
+        dump(L_DEBUG, " reload address ");
+        free_addresses(mp->al);
+        mp->al = get_addresses(); 
+
+        /* shrink session->sql && session->param mem */
+        /*
+        hash_shrink_mem(mp->hash, header->ts, 60);
+        dump(L_DEBUG, " shrink mem");
+        */
+
+        /* delete idle connection */
+        dump(L_DEBUG, " delete idle connection ");
+        hash_delete_idle(mp->hash, header->ts, 60);
+
+        alarm(60);
     }
     process_ip(mp, ip, header->ts);
 }
@@ -292,6 +334,8 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     char *sql = NULL, *user = NULL;
     int cmd = ERR;
     int ret = ERR;
+    int status = ERR;
+    uint32 sqlSaveLen = 0;
 
     ASSERT(datalen > 0);
     ASSERT(data);
@@ -301,14 +345,16 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
     lport = dport;
     rport = sport;
-   
-    if (likely(is_sql(data, datalen, &user))) {
+  
+    //hash_get();
+  
+    status = hash_get_status(mp->hash, dst, src,
+        lport, rport, &sql, &sqlSaveLen);
+
+    if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
         ASSERT(user == NULL);
 
         /* COM_ packet */
-        cmd = data[4];
-        ASSERT(cmd >= 0);
-
         if (unlikely(cmd == COM_QUIT)) {
 
             dump(L_DEBUG, "quit packet %s %d, so remove entry", sql, cmd);
@@ -316,14 +362,14 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 lport, rport, NULL, NULL, NULL);
         } else if (unlikely(cmd == COM_STMT_PREPARE)) {
 
-            ret = parse_sql(data, datalen, &sql);
-            ASSERT(ret > 0);
-            ASSERT(ret == cmd);
+            ret = parse_sql(data, datalen, &sql, sqlSaveLen);
+            /* TODO prepare sql is possible too long */
+            ASSERT(ret == 0);
             ASSERT(sql);
             ASSERT(strlen(sql) > 0);
             dump(L_DEBUG, "prepare packet %s %d", sql, cmd);
             hash_set(mp->hash, dst, src, 
-                lport, rport, tv, sql, cmd, NULL, AfterPreparePacket);
+                lport, rport, tv, sql, cmd, NULL, ret, AfterPreparePacket);
         } else if (unlikely(cmd == COM_STMT_CLOSE)) {
 
             /* #TODO, only remove stmt_id, not session */
@@ -377,35 +423,40 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         } else if (unlikely(cmd == COM_SLEEP)) {
             dump(L_DEBUG, "sleep ");
             hash_set(mp->hash, dst, src, 
-                lport, rport, tv, "sleep", cmd, NULL, AfterSqlPacket);
+                lport, rport, tv, "sleep", cmd, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_PING)) {
             dump(L_DEBUG, "ping ");
             hash_set(mp->hash, dst, src, 
-                lport, rport, tv, "ping", cmd, NULL, AfterSqlPacket);
+                lport, rport, tv, "ping", cmd, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_BINLOG_DUMP)) {
             dump(L_DEBUG, "binlog dump");
             hash_set(mp->hash, dst, src, 
-                lport, rport, tv, "binlog dump", cmd, NULL, AfterSqlPacket);
+                lport, rport, tv, "binlog dump", cmd, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_STATISTICS)) {
             dump(L_DEBUG, "statistics");
             hash_set(mp->hash, dst, src, 
-                lport, rport, tv, "statistics", cmd, NULL, AfterSqlPacket);
+                lport, rport, tv, "statistics", cmd, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_SET_OPTION)) {
             dump(L_DEBUG, "set option");
             hash_set(mp->hash, dst, src, 
-                lport, rport, tv, "set option", cmd, NULL, AfterSqlPacket);
+                lport, rport, tv, "set option", cmd, NULL, 0, AfterSqlPacket);
         } else if (likely(cmd > 0)) {
-            /* COM_QUERY */
-            ret = parse_sql(data, datalen, &sql);
-            if (ret == -1) {
+            //ASSERT((cmd == COM_QUERY) || (cmd == COM_INIT_DB));
+            ret = parse_sql(data, datalen, &sql, sqlSaveLen);
+            ASSERT(ret >= 0);
+            if (ret > 0) {
                 dump(L_DEBUG, "sql is too long big than a packet");
+            }
+
+            ASSERT(sql);
+            ASSERT(strlen(sql)>0);
+            dump(L_DEBUG, "sql packet [%s] %d", sql, cmd);
+            if (sqlSaveLen > 0) { 
+                hash_set_sql_len(mp->hash, dst, src, 
+                    lport, rport, ret);
             } else {
-                ASSERT(ret > 0);
-                ASSERT(sql);
-                ASSERT(strlen(sql)>0);
-                dump(L_DEBUG, "sql packet [%s] %d", sql, cmd);
                 hash_set(mp->hash, dst, src, 
-                    lport, rport, tv, sql, cmd, NULL, AfterSqlPacket);
+                    lport, rport, tv, sql, cmd, NULL, ret, AfterSqlPacket);
             }
         } else {
             ASSERT(NULL);
@@ -415,7 +466,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         ASSERT(user);
         /* auth packet */
         hash_set(mp->hash, dst, src, 
-            lport, rport, tv, NULL, cmd, user, AfterAuthPacket);
+            lport, rport, tv, NULL, cmd, user, 0, AfterAuthPacket);
         dump(L_DEBUG, "auth packet %s", user);
     }
 
@@ -559,7 +610,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
             // auth ok packet
             dump(L_DEBUG, "ok packet ");
             hash_set(mp->hash, src, dst, 
-                lport, rport, tv, NULL, cmd, NULL, AfterOkPacket);
+                lport, rport, tv, NULL, cmd, NULL, 0, AfterOkPacket);
         }
     } else if (AfterPreparePacket == status) {
 

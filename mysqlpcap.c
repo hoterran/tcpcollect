@@ -30,15 +30,15 @@ void init(MysqlPcap *mp) {
 int main (int argc, char **argv) {
 
     log_init("mysqlpcap", NULL, ".log");
-    log_change_level();
+    //log_change_level();
 
     char usage[] = "Usage: \n\tmysqlpcap -p [port] mysql listen port default 3306\n"
                     "\t -d daemon default no\n "
                     "\t -f [filename] default tty\n"
-                    "\t -i [dev] (eth* card use this)\n"
-                    "\t -l address1,address2 (bond card or use this)\n"
+                    "\t -i [dev] \n"
+                    "\t -l address1,address2 \n"
                     "\t -z show source ip\n"
-                    "\t -u focus user, sperated by comma, default null, example: user1, user2, conflict with -n \n"
+                    "\t -u focus user, sperated by comma, default null, example: user1,user2, conflict with -n \n"
                     "\t -n filter user, format same as above but conflict with -u\n"
                     "\t -h help";
 

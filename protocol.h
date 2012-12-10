@@ -42,9 +42,9 @@ enum enum_field_types {
     MYSQL_TYPE_GEOMETRY=255
 };
 
-int is_sql (char *payload, uint32 payload_len, char **user);
+int is_sql (char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen);
 
-int parse_sql(char *payload, uint32 payload_len, char **sql);
+int parse_sql(char *payload, uint32 payload_len, char **sql, uint32 sqlSaveLen);
 
 ulong parse_result(char *payload, uint32 payload_len, 
     uchar **myLastData, size_t *myLastDataSize, ulong *myLastNum);

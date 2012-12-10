@@ -45,8 +45,8 @@ srcdir = .
 #
 
 LD = /usr/bin/ld
-CC = gcc -g
-CCOPT = -O0 -fpic
+CC = gcc
+CCOPT = -O2 -fpic
 INCLS = -I. 
 DEFS = -DHAVE_CONFIG_H  -D_U_="__attribute__((unused))"
 ADDLOBJS = 

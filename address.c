@@ -1,6 +1,4 @@
-
 #include <pcap.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,7 +44,7 @@ AddressList* get_addresses() {
                 0.0.0.0
         */
 
-        dump(L_OK, "dev_name: %s\t desc:%s\t flags:%d", curr->name, curr->description, 
+        dump(L_DEBUG, "dev_name: %s\t desc:%s\t flags:%d", curr->name, curr->description, 
             curr->flags);
 
         for (addr = curr->addresses; addr; addr = addr->next) {
@@ -68,7 +66,7 @@ AddressList* get_addresses() {
             
                 if (0 == sin->sin_addr.s_addr)
                     continue;
-                dump(L_OK, "\t %s ", inet_ntoa(sin->sin_addr));
+                dump(L_DEBUG, "\t %s ", inet_ntoa(sin->sin_addr));
 
                 al->next = malloc(sizeof(AddressList));
                 if (!al->next)

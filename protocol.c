@@ -71,46 +71,56 @@ size_t *lastDataSize;
 ulong *lastNum;
 
 int
-is_sql(char *payload, uint32 payload_len, char **user) {
+is_sql(char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen) {
 
-    /*
-        4 4 1 23[\0] n 2(min, without password) n 
-        how to difer sql packet and auth packet
-    */
+    if (sqlSaveLen > 0)
+        return COM_QUERY;
+
     int packet_length = uint3korr(payload);
 
     if (payload_len >= packet_length + 4) {
+        /*
+         *   4 4 1 23[\0] n 2(min, without password) n 
+         *   how to difer sql packet and auth packet
+        */
         if (packet_length > 35) {
             int i;
             for( i = 13; i <= 35; i++) {
                 if (payload[i] != '\0') {
-                    return 1; 
+                    return payload[4]; 
                 }
             }
             *user = payload + 36;
-            return 0; // auth packet
+            return -1; // auth packet
         } else {
-            return 1; // COM_* Packet
+            return payload[4]; // COM_* Packet
         }
     }
-    return -1; 
+    return payload[4];  // big sql packet
 }
 
 int
-parse_sql(char* payload, uint32 payload_len, char **sql) {
+parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
+
+    /* for big sql */
+    if (sqlSaveLen > 0) {
+        ASSERT(sqlSaveLen >= payload_len);
+        return sqlSaveLen - payload_len;
+    }
 
     /*3 1 1 sql */
     int packet_length = uint3korr(payload);
-    
+
     if (payload_len >= packet_length + 4) {
-        //TODO big sql, how to handle
         //mysql packet is complete
         payload[4 + packet_length] = '\0';
         *sql = &payload[5];
-        return payload[4]; // cmd
+        return 0; // cmd
     }
-    /* sql is too long */
-    return -1;
+    /* sql is too long, sqlSaveLen */
+    payload[4 + packet_length] = '\0';
+    *sql = &payload[5];
+    return packet_length - (payload_len - 4);
 }
 
 /*

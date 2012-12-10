@@ -73,18 +73,9 @@ int single_process(char *process_name)
     }
 }
 
-void sig_pipe_handler(int sig) 
-{
+void sig_pipe_handler(int sig) {
     return;
 }
-
-char GoutputFlg = '0';
-
-void switch_flg(int sig) 
-{ 
-    if (SIGALRM == sig) GoutputFlg = '1';
-}
-
 void sig_init(void)
 {
     /*
@@ -112,6 +103,4 @@ void sig_init(void)
     sigaddset(&act2.sa_mask, SIGPIPE);
 
     sigaction(SIGPIPE, &act2, 0);
-
-    signal(SIGALRM, switch_flg);
 }
