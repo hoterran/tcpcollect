@@ -354,6 +354,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen);
 
+    if (status == AfterAuthCompressPacket) {
+        return ERR; 
+    }
+
     if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
         ASSERT(user == NULL);
 
@@ -449,6 +453,12 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 lport, rport, tv, "shutdown", cmd, NULL, 0, AfterSqlPacket);
         } else if (likely(cmd > 0)) {
             //ASSERT((cmd == COM_QUERY) || (cmd == COM_INIT_DB));
+            /*
+                sqlLen 3000
+                1. 1400 save sql and sqlSaveLen 1600
+                2. 1400 sqlSaveLen 200
+                3. 200 
+            */
             ret = parse_sql(data, datalen, &sql, sqlSaveLen);
             ASSERT(ret >= 0);
             if (ret > 0) {
@@ -471,10 +481,17 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         }
     } else {
         ASSERT(user);
+        ASSERT((cmd == -2) || ( cmd == -1));
         /* auth packet */
-        hash_set(mp->hash, dst, src, 
-            lport, rport, tv, NULL, cmd, user, 0, AfterAuthPacket);
-        dump(L_DEBUG, "auth packet %s", user);
+        if (cmd == -1) {
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, NULL, cmd, user, 0, AfterAuthPacket);
+            dump(L_DEBUG, "auth packet %s", user);
+        } else {
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, NULL, cmd, user, 0, AfterAuthCompressPacket);
+            dump(L_OK, "auth packet %s is compress, will filter", user);
+        }
     }
 
     return OK;
@@ -511,6 +528,9 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         lport, rport, &tv2, &sql, &user, &value, &lastData, 
         &lastDataSize, &lastNum, &tcp_seq, &cmd);
 
+    if (status == AfterAuthCompressPacket) {
+        return ERR; 
+    }
     if (status > 0) {
         if (*tcp_seq == 0) {
             *tcp_seq =ntohl(tcp->seq) + datalen;

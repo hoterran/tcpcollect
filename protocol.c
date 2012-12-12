@@ -69,7 +69,11 @@ ulong lcb_length(char *packet);
 uchar **lastData;
 size_t *lastDataSize;
 ulong *lastNum;
-
+/*
+    -1 auth
+    -2 auth compress
+    cmd cmd packet
+*/
 int
 is_sql(char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen) {
 
@@ -91,7 +95,14 @@ is_sql(char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen) {
                 }
             }
             *user = payload + 36;
-            return -1; // auth packet
+            #define CLIENT_COMPRESS     32  /* Can use compression protocol */ 
+            unsigned long client_flag = 0;
+            /* only 41 protocol */
+            client_flag = uint4korr(payload + 4);
+            if (client_flag & CLIENT_COMPRESS)
+                return -2; //auth packet compress
+            else 
+                return -1; // auth packet
         } else {
             return payload[4]; // COM_* Packet
         }
