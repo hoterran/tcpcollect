@@ -61,7 +61,7 @@ int hash_set_sql_len(struct hash *hash,
          
 int hash_clean(struct hash *hash, unsigned long min);
 
-void hash_delete_idle(struct hash* hash, struct timeval tv, int idle_time);
+void hash_delete_idle(struct hash* hash, time_t now, int idle_time);
 
 void hash_print(struct hash* hash);
 

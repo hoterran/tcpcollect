@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pcap.h>
+#include <time.h>
 
 #include "utils.h"
 #include "log.h"
@@ -24,6 +25,9 @@ void init(MysqlPcap *mp) {
     } else {
         mp->al = get_addresses();
     }
+    mp->lastReloadAddressTime = time(NULL);
+    mp->fakeNow = mp->lastReloadAddressTime;
+    mp->lastFlushTime = mp->lastReloadAddressTime;
     mp->hash = hash_new();
 }
 

@@ -2,6 +2,7 @@
 #define _MYSQLPCAP_
 
 #include <pcap.h>
+#include <sys/time.h>
 
 typedef struct _MysqlPcap {
     void        *pd;
@@ -18,6 +19,9 @@ typedef struct _MysqlPcap {
     int         isShowSrcIp;
     void        *focusUser;
     void        *filterUser;
+    time_t      fakeNow;
+    time_t      lastReloadAddressTime;
+    time_t      lastFlushTime;
 } MysqlPcap;
 
 #endif

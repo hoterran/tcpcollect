@@ -9,8 +9,8 @@
 #include <pcap.h>
 #include <pcap/sll.h>
 #include <time.h>
-#include <signal.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "utils.h"
 #include "log.h"
@@ -31,6 +31,10 @@
 #define CONNECT_IDLE_TIME 8 * 3600 
 /* each interval, will reload current ip address */
 #define RELOAD_ADDRESS_INTERVAL 3600
+/* poll wait time ms */
+#define PCAP_POLL_TIMEOUT 3000
+/* log flush time, avoid printf two much */
+#define FLUSH_INTERVAL 5
 
 void process_packet(unsigned char *user, const struct pcap_pkthdr *header,
     const unsigned char *packet);
@@ -50,11 +54,13 @@ void sigusr1_handler(int sig) {
     if (sig == SIGUSR1) GoutputPacketStatus = '1';
 }
 
+/*
 char GreloadAddress = '0';
 
 void sigalarm_handler(int sig) {
     if (sig == SIGALRM) GreloadAddress = '1';
 }
+*/
 
 /*
     if dev has set, use it, else use 'any'
@@ -75,18 +81,6 @@ start_packet(MysqlPcap *mp) {
     sigaddset(&act.sa_mask, SIGUSR1);
     sigaction(SIGUSR1, &act, NULL);
 
-    /* if not specify address, would dynamic reload address */
-    if (NULL == mp->address) {
-        act.sa_handler = sigalarm_handler;
-        act.sa_flags = SA_RESTART;
-        sigemptyset(&act.sa_mask);
-        sigaddset(&act.sa_mask, SIGALRM);
-        sigaction(SIGALRM, &act, NULL);
-
-        alarm(RELOAD_ADDRESS_INTERVAL);
-    }
-
-
     mp->pd = pcap_create(mp->netDev, ebuf);
     if (NULL == mp->pd) {
         dump(L_ERR, "pcap_open_live error: %s - %s", mp->netDev, ebuf);
@@ -100,7 +94,8 @@ start_packet(MysqlPcap *mp) {
 
     ret = pcap_set_snaplen(mp->pd, CAP_LEN);
     ASSERT(ret == 0);
-    ret = pcap_set_timeout(mp->pd, 0);
+    /* 3s */
+    ret = pcap_set_timeout(mp->pd, PCAP_POLL_TIMEOUT);
     ASSERT(ret == 0);
 
     /* set pcap buffer size is 32m, decline drop percentage */
@@ -139,7 +134,52 @@ start_packet(MysqlPcap *mp) {
         dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "---------", "-----------", "----", "----", "---");
     }
 
-    pcap_loop(mp->pd, -1, process_packet, (u_char*)mp);
+    while(1) {
+        ret = pcap_dispatch(mp->pd, -1, process_packet, (u_char*)mp);
+        ASSERT(ret >=0);
+
+        /* output drop packet percentage */
+        if (GoutputPacketStatus == '1') {
+            GoutputPacketStatus = '0'; 
+            struct pcap_stat ps;
+            pcap_stats(mp->pd, &ps);
+            dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop); 
+        }
+
+        /* 
+         * use mp->fakeNow replace time(), avoid systemcall
+        */
+        if (ret == 0) {
+            mp->fakeNow = mp->fakeNow + (PCAP_POLL_TIMEOUT / 1000);
+            dump(L_DEBUG, "timeout~~~~ %d %ld", ret, mp->fakeNow);
+        }
+        /* flush log Cache */
+        if (mp->fakeNow - mp->lastFlushTime > FLUSH_INTERVAL) {
+            /**/ 
+            mp->lastFlushTime = mp->fakeNow;
+        }
+        /* reload address and delete idle connection, default interval is mysql wait timeout */
+        ASSERT(mp->lastReloadAddressTime <= mp->fakeNow);
+        if (mp->fakeNow - mp->lastReloadAddressTime > RELOAD_ADDRESS_INTERVAL) {
+            /* if specify address, skip reload address */
+            if (NULL == mp->address) {
+                dump(L_DEBUG, " reload address ");
+                free_addresses(mp->al);
+                mp->al = get_addresses();
+                mp->lastReloadAddressTime = time(NULL);
+                mp->fakeNow = mp->lastReloadAddressTime;
+            }
+
+            dump(L_DEBUG, " delete idle connection ");
+            hash_delete_idle(mp->hash, mp->fakeNow, 8 * RELOAD_ADDRESS_INTERVAL);
+        }
+
+            /* shrink session->sql && session->param mem */
+            /*
+            hash_shrink_mem(mp->hash, header->ts, 60);
+            dump(L_DEBUG, " shrink mem");
+            */
+    }
 
     pcap_close(mp->pd);
 
@@ -191,36 +231,7 @@ process_packet(u_char *user, const struct pcap_pkthdr *header,
     if (packet_type != ETHERTYPE_IP)
         return;
 
-    if (GoutputPacketStatus == '1') {
-        GoutputPacketStatus = '0'; 
-        /*output packet */
-        struct pcap_stat ps;
-        pcap_stats(mp->pd, &ps);
-        dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop); 
-
-    }
-
-    if (GreloadAddress == '1') {
-        ASSERT(mp->address == NULL);
-        GreloadAddress = '0';
-
-        /* reload address TODO */
-        dump(L_DEBUG, " reload address ");
-        free_addresses(mp->al);
-        mp->al = get_addresses(); 
-
-        /* shrink session->sql && session->param mem */
-        /*
-        hash_shrink_mem(mp->hash, header->ts, 60);
-        dump(L_DEBUG, " shrink mem");
-        */
-
-        /* delete idle connection, default is mysql wait timeout */
-        dump(L_DEBUG, " delete idle connection ");
-        hash_delete_idle(mp->hash, header->ts, 8 * RELOAD_ADDRESS_INTERVAL);
-
-        alarm(RELOAD_ADDRESS_INTERVAL);
-    }
+    mp->fakeNow = header->ts.tv_sec; /* use packet time instead of time systemcall */
     process_ip(mp, ip, header->ts);
 }
 
@@ -306,17 +317,17 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         /*
             Client                                      Server
             ==========================================================
-                                                        handshake
+                                             <           handshake
             auth    >    AfterAuthPacket 
                         AfterOkPacket        <           auth ok| error         
 
-            sql     >    AfterSqlPacket 
-                        AfterResultPacket      <         resultset              
+            1.sql     >    AfterSqlPacket 
+                        AfterResultPacket    <          resultset              
 
-            prepare  >   AfterPreparePacket      
+            1.prepare  >   AfterPreparePacket      
                         AfterPrepareOkPacket     <       prepare-ok             
 
-            execute  >   AfterSqlPacket
+            2.execute  >   AfterSqlPacket
                         AfterResultPacket      <         resultset               
 
             stmt_close >
@@ -348,8 +359,6 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
     lport = dport;
     rport = sport;
-  
-    //hash_get();
   
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen);
@@ -481,7 +490,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         }
     } else {
         ASSERT(user);
-        ASSERT((cmd == -2) || ( cmd == -1));
+        ASSERT((cmd == -2) || (cmd == -1));
         /* auth packet */
         if (cmd == -1) {
             hash_set(mp->hash, dst, src, 

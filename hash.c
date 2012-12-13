@@ -111,9 +111,9 @@ static void funcp_delete_idle(struct hash *hash, struct session *session, void *
     }
 }
 
-void hash_delete_idle(struct hash* hash, struct timeval tv, int idle_time) {
+void hash_delete_idle(struct hash* hash, time_t now, int idle_time) {
     struct Arg a ;
-    a.now = tv.tv_sec;
+    a.now = now;
     a.idle_time = idle_time;
     hash_loop(hash, funcp_delete_idle, (void*)&a);
 }
