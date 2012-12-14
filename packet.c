@@ -147,10 +147,12 @@ start_packet(MysqlPcap *mp) {
         }
 
         /* 
-         * use mp->fakeNow replace time(), avoid systemcall
+         * avert each return systemcall time, only poll timeout call it
+         * each 3 seconds call time(NULL) in maximum
+         * ret > 0, we use mp->fakeNow as now, max deviation is smaller than 3 seconds
         */
         if (ret == 0) {
-            mp->fakeNow = mp->fakeNow + (PCAP_POLL_TIMEOUT / 1000);
+            mp->fakeNow = time(NULL);
             dump(L_DEBUG, "timeout~~~~ %d %ld", ret, mp->fakeNow);
         }
         /* flush log Cache */
@@ -158,7 +160,12 @@ start_packet(MysqlPcap *mp) {
             /**/ 
             mp->lastFlushTime = mp->fakeNow;
         }
-        /* reload address and delete idle connection, default interval is mysql wait timeout */
+        /* 
+         * each INTERVAL do below
+         * 1. reload address 
+         * 2. delete idle connection, interval is mysql wait timeout 
+         * 3. print drop percentage
+        */
         ASSERT(mp->lastReloadAddressTime <= mp->fakeNow);
         if (mp->fakeNow - mp->lastReloadAddressTime > RELOAD_ADDRESS_INTERVAL) {
             /* if specify address, skip reload address */
@@ -172,13 +179,17 @@ start_packet(MysqlPcap *mp) {
 
             dump(L_DEBUG, " delete idle connection ");
             hash_delete_idle(mp->hash, mp->fakeNow, 8 * RELOAD_ADDRESS_INTERVAL);
+
+            struct pcap_stat ps;
+            pcap_stats(mp->pd, &ps);
+            dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop); 
         }
 
-            /* shrink session->sql && session->param mem */
-            /*
-            hash_shrink_mem(mp->hash, header->ts, 60);
-            dump(L_DEBUG, " shrink mem");
-            */
+        /* shrink session->sql && session->param mem */
+        /*
+        hash_shrink_mem(mp->hash, header->ts, 60);
+        dump(L_DEBUG, " shrink mem");
+        */
     }
 
     pcap_close(mp->pd);
