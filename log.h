@@ -18,7 +18,7 @@
 #define L_INFO  6
 #define L_DEBUG 7 
 
-void log_init(const char *prefix, const char *format, const char *suffix);
+void log_init(const char *prefix, const char *format, const char *suffix, int level);
 
 #define dump(x,y...)    _log(#x, x, ##y)
 

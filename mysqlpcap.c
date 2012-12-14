@@ -15,6 +15,11 @@
 #include "user.h"
 
 void init(MysqlPcap *mp) {
+
+    if (NULL == mp->dataLog) mp->dataLog = stdout;
+    mp->dataLogCache = malloc(100 * 1024);
+    setbuffer(mp->dataLog, mp->dataLogCache, 100 * 1024);
+
     if (mp->mysqlPort == 0) 
         mp->mysqlPort = 3306;
     if (strlen(mp->netDev) == 0)
@@ -33,12 +38,11 @@ void init(MysqlPcap *mp) {
 
 int main (int argc, char **argv) {
 
-    log_init("mysqlpcap", NULL, ".log");
-    //log_change_level();
+    log_init("mysqlpcap", NULL, ".log", L_DEBUG);
 
     char usage[] = "Usage: \n\tmysqlpcap -p [port] mysql listen port default 3306\n"
                     "\t -d daemon default no\n "
-                    "\t -f [filename] default tty\n"
+                    "\t -f [filename] default stdout \n"
                     "\t -i [dev] \n"
                     "\t -l address1,address2 \n"
                     "\t -z show source ip\n"
@@ -61,6 +65,10 @@ int main (int argc, char **argv) {
                 break;
             case 'f':
                 snprintf(mp->logfile, sizeof(mp->logfile), "%s", optarg);
+                mp->dataLog = fopen(mp->logfile, "a+");
+                if (NULL == mp->dataLog) {
+                    dump(L_ERR, "%s can open", mp->logfile); 
+                }
                 break;
             case 'k' :
                 snprintf(mp->keyWord, sizeof(mp->keyWord), "%s", optarg); 

@@ -34,7 +34,7 @@
 /* poll wait time ms */
 #define PCAP_POLL_TIMEOUT 3000
 /* log flush time, avoid printf two much */
-#define FLUSH_INTERVAL 5
+#define FLUSH_INTERVAL 2
 
 void process_packet(unsigned char *user, const struct pcap_pkthdr *header,
     const unsigned char *packet);
@@ -123,16 +123,19 @@ start_packet(MysqlPcap *mp) {
     pcap_freecode(&fcode);
 
     dump(L_OK, "Listen Device is %s, Filter is %s", mp->netDev, mp->filter);
+    fprintf(mp->dataLog, "Listen Device is %s, Filter is %s\n", mp->netDev, mp->filter);
 
     if (mp->isShowSrcIp == 1) {
-        dump(L_OK, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s", 
+        fprintf(mp->dataLog, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n", 
             "timestamp", "source ip ",    "latency(us)", "rows", "user", "sql");
-        dump(L_OK, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s", 
+        fprintf(mp->dataLog, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n", 
             "---------", "---------------", "-----------", "----", "----", "---");
     } else {
-        dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "timestamp", "latency(us)", "rows", "user", "sql");
-        dump(L_OK, "%-20.20s%-16.16s%-10.10s%-10.10s%s", "---------", "-----------", "----", "----", "---");
+        fprintf(mp->dataLog, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "timestamp", "latency(us)", "rows", "user", "sql");
+        fprintf(mp->dataLog, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "---------", "-----------", "----", "----", "---");
     }
+
+    fflush(mp->dataLog);
 
     while(1) {
         ret = pcap_dispatch(mp->pd, -1, process_packet, (u_char*)mp);
@@ -158,6 +161,7 @@ start_packet(MysqlPcap *mp) {
         /* flush log Cache */
         if (mp->fakeNow - mp->lastFlushTime > FLUSH_INTERVAL) {
             /**/ 
+            fflush(mp->dataLog);
             mp->lastFlushTime = mp->fakeNow;
         }
         /* 
@@ -626,10 +630,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                dump(L_OK, "%-20.20s%-17.17s%-16ld%-10ld%-10.10s %s [%s]", tt,
+                fprintf(mp->dataLog, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
                     srcip, latency , num, user, sql, value);
             } else {
-                dump(L_OK, "%-20.20s%-16ld%-10ld%-10.10s %s [%s]", tt,
+                fprintf(mp->dataLog, "%-20.20s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
                     latency, num, user, sql, value);
             }
         } else {
@@ -638,10 +642,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                dump(L_OK, "%-20.20s%-17.17s%-16d%-10ld%-10.10s %s", tt,
+                fprintf(mp->dataLog, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s\n", tt,
                     srcip, latency, num, user, sql);
             } else {
-                dump(L_OK, "%-20.20s%-16d%-10ld%-10.10s %s", tt,
+                fprintf(mp->dataLog, "%-20.20s%-16lu%-10ld%-10.10s %s\n", tt,
                     latency, num, user, sql);
             }
         }

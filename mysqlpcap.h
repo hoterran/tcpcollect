@@ -12,6 +12,8 @@ typedef struct _MysqlPcap {
     bpf_u_int32 netmask;
     bpf_u_int32 localnet;
     char        logfile[256];
+    FILE        *dataLog;
+    void        *dataLogCache;
     char        keyWord[256];
     void        *al;
     void        *hash;

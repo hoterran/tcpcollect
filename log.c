@@ -55,17 +55,13 @@ void log_change_filename(time_t t) {
  */
 
 /* use signal change level */
-void log_change_level() {
-    if (G_log.level == L_OK)
-        G_log.level = L_DEBUG;
-    else 
-        G_log.level = L_OK;
-
+void log_change_level(int level) {
+    G_log.level = level;
     dump(L_OK, "log level change to %d", G_log.level);
 }
 
 void 
-log_init(const char *prefix, const char *format, const char *suffix) {
+log_init(const char *prefix, const char *format, const char *suffix, int level) {
 
     if (prefix == NULL) {
         G_log.level = L_OK;
@@ -76,10 +72,10 @@ log_init(const char *prefix, const char *format, const char *suffix) {
     act.sa_handler = log_change_level;
     act.sa_flags = SA_RESTART;
     sigemptyset(&act.sa_mask);
-    sigaddset(&act.sa_mask, SIGUSR1);
-    sigaction(SIGUSR1, &act, NULL);
+    sigaddset(&act.sa_mask, SIGUSR2);
+    sigaction(SIGUSR2, &act, NULL);
 
-    G_log.level = L_DEBUG;
+    G_log.level = level;
     G_log.syslog_enabled = 0;
 
     G_log.filename = malloc(LOG_FILE_LEN);
@@ -131,13 +127,10 @@ _log(const char *levelstring, int level,
         levelstring, buf, msg);
     fflush(fp);
 
-    if (G_log.filename && (level <= L_OK)) 
-        printf("%s\n", msg);
-  
     if (G_log.filename) fclose(fp);
   
     if (G_log.syslog_enabled) syslog(syslogLevelMap[level], "%s", msg);
-} 
+}
 
 #ifdef _LOG_TEST_
 
