@@ -374,7 +374,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen);
 
-    if (status == AfterAuthCompressPacket) {
+    if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
         return ERR; 
     }
 
@@ -504,6 +504,23 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         ASSERT((cmd == -2) || (cmd == -1));
         /* auth packet */
         if (cmd == -1) {
+            if (mp->focusUser) {
+                if (NULL == listSearchKey(mp->focusUser, user)) {
+                    dump(L_DEBUG, "user:%s is not in focus", user);
+                    hash_set(mp->hash, dst, src, 
+                        lport, rport, tv, NULL, cmd, user, 0, AfterFilterUserPacket);
+                    return ERR;
+                }
+            }
+            if (mp->filterUser) {
+                if (listSearchKey(mp->filterUser, user)) {
+                    dump(L_DEBUG, "user:%s is in filter", user); 
+                    hash_set(mp->hash, dst, src, 
+                        lport, rport, tv, NULL, cmd, user, 0, AfterFilterUserPacket);
+                    return ERR;
+                }
+            }
+
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, NULL, cmd, user, 0, AfterAuthPacket);
             dump(L_DEBUG, "auth packet %s", user);
@@ -512,6 +529,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 lport, rport, tv, NULL, cmd, user, 0, AfterAuthCompressPacket);
             dump(L_OK, "auth packet %s is compress, will filter", user);
         }
+
     }
 
     return OK;
@@ -548,7 +566,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         lport, rport, &tv2, &sql, &user, &value, &lastData, 
         &lastDataSize, &lastNum, &tcp_seq, &cmd);
 
-    if (status == AfterAuthCompressPacket) {
+    if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
         return ERR; 
     }
     if (status > 0) {
@@ -586,20 +604,6 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         ASSERT(cmd >= 0);
         ASSERT(strlen(sql) > 0);
 
-        if (user) {
-            if (mp->focusUser) {
-                if (NULL == listSearchKey(mp->focusUser, user)) {
-                    dump(L_DEBUG, "user:%s is not in focus", user);
-                    return ERR; 
-                }
-            }
-            if (mp->filterUser) {
-                if (listSearchKey(mp->filterUser, user)) {
-                    dump(L_DEBUG, "user:%s is in filter", user); 
-                    return ERR;
-                }
-            }
-        }
 
         long num;
         ulong latency;

@@ -30,7 +30,8 @@ enum SessionStatus {    AfterAuthPacket = 1,
                         AfterResultPacket,
                         AfterPreparePacket,
                         AfterPrepareOkPacket,
-                        AfterAuthCompressPacket
+                        AfterAuthCompressPacket,
+                        AfterFilterUserPacket
                         };
 
 struct hash;
