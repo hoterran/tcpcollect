@@ -25,13 +25,10 @@ char G_one_cache[ONE_CACHE_MAX_SIZE];
 /* file or stdout */
 int fileCacheInit(MysqlPcap *mp) {
     ASSERT(mp);
-    mp->config = &G_fc;
-
-    FileCache *fc = mp->config;
+    FileCache *fc = mp->config = malloc(sizeof(FileCache));
 
     if (strlen(mp->cacheFileName) > 0) {
         fc->file = fopen(mp->cacheFileName, "a+");
-
         if (NULL == fc->file) {
             dump(L_ERR, "%s can open", mp->cacheFileName); 
         }
