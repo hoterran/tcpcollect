@@ -169,7 +169,7 @@ start_packet(MysqlPcap *mp) {
         if (mp->fakeNow - mp->lastReloadAddressTime > RELOAD_ADDRESS_INTERVAL) {
             /* if specify address, skip reload address */
             if (NULL == mp->address) {
-                dump(L_DEBUG, " reload address ");
+                dump(L_OK, " reload address ");
                 free_addresses(mp->al);
                 mp->al = get_addresses();
                 mp->lastReloadAddressTime = time(NULL);
