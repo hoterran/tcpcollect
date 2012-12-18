@@ -13,12 +13,18 @@
 #include "hash.h"
 #include "adlist.h"
 #include "user.h"
+#include "file_cache.h"
 
-void init(MysqlPcap *mp) {
+int init(MysqlPcap *mp) {
+    ASSERT(mp);
+    /* file_cache */
+    mp->initCache = fileCacheInit;
+    mp->addCache = fileCacheAdd;
+    mp->flushCache = fileCacheFlush;
 
-    if (NULL == mp->dataLog) mp->dataLog = stdout;
-    mp->dataLogCache = malloc(100 * 1024);
-    setbuffer(mp->dataLog, mp->dataLogCache, 100 * 1024);
+    gethostname(mp->hostname, sizeof(mp->hostname));
+
+    if (ERR == mp->initCache(mp)) return ERR;
 
     if (mp->mysqlPort == 0) 
         mp->mysqlPort = 3306;
@@ -32,17 +38,18 @@ void init(MysqlPcap *mp) {
     }
     mp->lastReloadAddressTime = time(NULL);
     mp->fakeNow = mp->lastReloadAddressTime;
-    mp->lastFlushTime = mp->lastReloadAddressTime;
     mp->hash = hash_new();
+    return OK;
 }
 
 int main (int argc, char **argv) {
 
-    log_init("mysqlpcap", NULL, ".log", L_DEBUG);
+    log_init("mysqlpcap", NULL, ".log", L_OK);
 
     char usage[] = "Usage: \n\tmysqlpcap -p [port] mysql listen port default 3306\n"
                     "\t -d daemon default no\n "
                     "\t -f [filename] default stdout \n"
+                    "\t -c config file \n"
                     "\t -i [dev] \n"
                     "\t -l address1,address2 \n"
                     "\t -z show source ip\n"
@@ -55,7 +62,7 @@ int main (int argc, char **argv) {
     if (NULL == mp) return ERR;
 
     char ch;
-    while (-1 != (ch = getopt(argc, argv, "p:df:k:i:l:hz:u:n:"))) {
+    while (-1 != (ch = getopt(argc, argv, "p:df:c:k:i:l:hzu:n:"))) {
         switch (ch) {
             case 'p' :
                 mp->mysqlPort = atoi(optarg);
@@ -64,11 +71,12 @@ int main (int argc, char **argv) {
                 daemon_init();
                 break;
             case 'f':
-                snprintf(mp->logfile, sizeof(mp->logfile), "%s", optarg);
-                mp->dataLog = fopen(mp->logfile, "a+");
-                if (NULL == mp->dataLog) {
-                    dump(L_ERR, "%s can open", mp->logfile); 
-                }
+                /* cache write this file, conflict with -c */
+                snprintf(mp->cacheFileName, sizeof(mp->cacheFileName), "%s", optarg);
+                break;
+            case 'c':
+                /* cache config file, conflict with -f */
+                snprintf(mp->cacheConfigFileName, sizeof(mp->cacheConfigFileName), "%s", optarg);
                 break;
             case 'k' :
                 snprintf(mp->keyWord, sizeof(mp->keyWord), "%s", optarg); 
@@ -76,6 +84,13 @@ int main (int argc, char **argv) {
             case 'i' :
                 snprintf(mp->netDev, sizeof(mp->netDev), "%s", optarg); 
                 break; 
+            case 'l':
+                mp->address = malloc(strlen(optarg) + 1);
+                snprintf(mp->address, strlen(optarg) + 1, "%s", optarg);
+                break;
+            case 'z':
+                mp->isShowSrcIp = 1;
+                break;
             case 'u' :
                 if (mp->filterUser) {
                     printf("-u conflict with -n\n"); 
@@ -92,13 +107,6 @@ int main (int argc, char **argv) {
                 mp->filterUser = listCreate();
                 initUserList(mp->filterUser, optarg);
                 break; 
-            case 'l':
-                mp->address = malloc(strlen(optarg) + 1);
-                snprintf(mp->address, strlen(optarg) + 1, "%s", optarg);
-                break;
-            case 'z':
-                mp->isShowSrcIp = 1;
-                break;
             case 'h' :
             default :
                 printf("%s", usage);
@@ -106,7 +114,9 @@ int main (int argc, char **argv) {
         }
     }
 
-    init(mp);
+    if (ERR == init(mp)) {
+        return ERR; 
+    }
 
     if (0 != single_process(argv[0])) {
         dump(L_ERR, "only single process");

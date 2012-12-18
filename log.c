@@ -101,8 +101,7 @@ log_init(const char *prefix, const char *format, const char *suffix, int level) 
 }
 
 void 
-_log(const char *levelstring, int level, 
-    const char *fmt, ...) {
+_log(const char *levelstring, int level, const char *fmt, ...) {
 
     const int syslogLevelMap[] = { L_DEBUG, L_INFO, L_OK, L_WARN, L_ERR };
     time_t now = time(NULL);

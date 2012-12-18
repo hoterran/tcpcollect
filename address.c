@@ -23,7 +23,7 @@ AddressList* get_addresses() {
     char errbuf[PCAP_ERRBUF_SIZE];
 
     if (pcap_findalldevs(&devlist, errbuf)) {
-        fprintf(stderr, "pcap: %s\n", errbuf);
+        dump(L_ERR, "pcap: %s\n", errbuf);
         return NULL;
     }
     
@@ -44,7 +44,7 @@ AddressList* get_addresses() {
                 0.0.0.0
         */
 
-        dump(L_DEBUG, "dev_name: %s\t desc:%s\t flags:%d", curr->name, curr->description, 
+        dump(L_OK, "dev_name: %s\t desc:%s\t flags:%d", curr->name, curr->description, 
             curr->flags);
 
         for (addr = curr->addresses; addr; addr = addr->next) {
@@ -66,7 +66,7 @@ AddressList* get_addresses() {
             
                 if (0 == sin->sin_addr.s_addr)
                     continue;
-                dump(L_DEBUG, "\t %s ", inet_ntoa(sin->sin_addr));
+                dump(L_OK, "\t %s ", inet_ntoa(sin->sin_addr));
 
                 al->next = malloc(sizeof(AddressList));
                 if (!al->next)

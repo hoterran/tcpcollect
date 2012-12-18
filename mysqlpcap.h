@@ -1,19 +1,26 @@
 #ifndef _MYSQLPCAP_
 #define _MYSQLPCAP_
 
+struct _MysqlPcap;
+typedef struct _MysqlPcap MysqlPcap;
+
+typedef int (*initFp) (MysqlPcap *);
+typedef void (*addFp) (MysqlPcap *, const char *fmt, ...);
+typedef void (*flushFp) (MysqlPcap *);
+
 #include <pcap.h>
 #include <sys/time.h>
 
-typedef struct _MysqlPcap {
+#define HOST_NAME_LEN 64
+
+struct _MysqlPcap {
     void        *pd;
+    char        hostname[HOST_NAME_LEN];
     int         mysqlPort;
     char        filter[10240]; /* 15(ip) * 100 */
     char        netDev[10];
     bpf_u_int32 netmask;
     bpf_u_int32 localnet;
-    char        logfile[256];
-    FILE        *dataLog;
-    void        *dataLogCache;
     char        keyWord[256];
     void        *al;
     void        *hash;
@@ -23,7 +30,18 @@ typedef struct _MysqlPcap {
     void        *filterUser;
     time_t      fakeNow;
     time_t      lastReloadAddressTime;
-    time_t      lastFlushTime;
-} MysqlPcap;
+    long        packetSeq;          /* packet sequence */
+
+    /* cache */
+    initFp      initCache;
+    addFp       addCache;
+    flushFp     flushCache;
+
+    char        cacheFileName[256]; /* only use file cache */
+    char        cacheConfigFileName[256]; /* redis config, mysql config */
+
+    void        *config;      /* fd, redisContext, MYSQL */
+    time_t      cacheFlushTime;
+};
 
 #endif

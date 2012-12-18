@@ -33,8 +33,6 @@
 #define RELOAD_ADDRESS_INTERVAL 3600
 /* poll wait time ms */
 #define PCAP_POLL_TIMEOUT 3000
-/* log flush time, avoid printf two much */
-#define FLUSH_INTERVAL 2
 
 void process_packet(unsigned char *user, const struct pcap_pkthdr *header,
     const unsigned char *packet);
@@ -53,7 +51,6 @@ char GoutputPacketStatus = '0';
 void sigusr1_handler(int sig) {
     if (sig == SIGUSR1) GoutputPacketStatus = '1';
 }
-
 /*
 char GreloadAddress = '0';
 
@@ -73,7 +70,7 @@ start_packet(MysqlPcap *mp) {
     char ebuf[PCAP_ERRBUF_SIZE];
     int ret;
 
-    struct sigaction act;    
+    struct sigaction act;
 
     act.sa_handler = sigusr1_handler;
     act.sa_flags = SA_RESTART;
@@ -94,7 +91,6 @@ start_packet(MysqlPcap *mp) {
 
     ret = pcap_set_snaplen(mp->pd, CAP_LEN);
     ASSERT(ret == 0);
-    /* 3s */
     ret = pcap_set_timeout(mp->pd, PCAP_POLL_TIMEOUT);
     ASSERT(ret == 0);
 
@@ -123,19 +119,22 @@ start_packet(MysqlPcap *mp) {
     pcap_freecode(&fcode);
 
     dump(L_OK, "Listen Device is %s, Filter is %s", mp->netDev, mp->filter);
-    fprintf(mp->dataLog, "Listen Device is %s, Filter is %s\n", mp->netDev, mp->filter);
 
-    if (mp->isShowSrcIp == 1) {
-        fprintf(mp->dataLog, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n", 
-            "timestamp", "source ip ",    "latency(us)", "rows", "user", "sql");
-        fprintf(mp->dataLog, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n", 
-            "---------", "---------------", "-----------", "----", "----", "---");
-    } else {
-        fprintf(mp->dataLog, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "timestamp", "latency(us)", "rows", "user", "sql");
-        fprintf(mp->dataLog, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "---------", "-----------", "----", "----", "---");
+    if (strlen(mp->cacheFileName) > 0) {
+        mp->addCache(mp, "Listen Device is %s, Filter is %s\n", mp->netDev, mp->filter);
+
+        if (mp->isShowSrcIp == 1) {
+            mp->addCache(mp, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n", 
+                "timestamp", "source ip ",    "latency(us)", "rows", "user", "sql");
+            mp->addCache(mp, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n", 
+                "---------", "---------------", "-----------", "----", "----", "---");
+        } else {
+            mp->addCache(mp, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "timestamp", "latency(us)", "rows", "user", "sql");
+            mp->addCache(mp, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "---------", "-----------", "----", "----", "---");
+        }
+
+        mp->flushCache(mp);
     }
-
-    fflush(mp->dataLog);
 
     while(1) {
         ret = pcap_dispatch(mp->pd, -1, process_packet, (u_char*)mp);
@@ -158,12 +157,8 @@ start_packet(MysqlPcap *mp) {
             mp->fakeNow = time(NULL);
             dump(L_DEBUG, "timeout~~~~ %d %ld", ret, mp->fakeNow);
         }
-        /* flush log Cache */
-        if (mp->fakeNow - mp->lastFlushTime > FLUSH_INTERVAL) {
-            /**/ 
-            fflush(mp->dataLog);
-            mp->lastFlushTime = mp->fakeNow;
-        }
+        /* flush cache, actually is flush by user */
+        mp->flushCache(mp);
         /* 
          * each INTERVAL do below
          * 1. reload address 
@@ -246,6 +241,7 @@ process_packet(u_char *user, const struct pcap_pkthdr *header,
     if (packet_type != ETHERTYPE_IP)
         return;
 
+    mp->packetSeq++;
     mp->fakeNow = header->ts.tv_sec; /* use packet time instead of time systemcall */
     process_ip(mp, ip, header->ts);
 }
@@ -260,29 +256,29 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
     addr = inet_ntoa(ip->ip_src);
     strncpy(src, addr, 15);
     src[15] = '\0';
-    
+
     addr = inet_ntoa(ip->ip_dst);
     strncpy(dst, addr, 15);
     dst[15] = '\0';
-    
+
     if (is_local_address(mp->al, ip->ip_src))
         incoming = '0';
     else if (is_local_address(mp->al, ip->ip_dst))
         incoming = '1';
     else
         return ERR;
-    
+
     len = htons(ip->ip_len);
     ASSERT(len > 0);
-    
+
     switch (ip->ip_p) {
         struct tcphdr *tcp;
         uint16 sport, dport;
         uint32 datalen;
-    
+
     case IPPROTO_TCP:
         tcp = (struct tcphdr *) ((uchar *) ip + sizeof(struct ip));
-        
+
 #if defined(__FAVOR_BSD)
         sport = ntohs(tcp->th_sport);
         dport = ntohs(tcp->th_dport);
@@ -321,7 +317,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 break;
             outbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv, tcp, dst); 
         }
-        
+
         /* internal 
          * receive auth, insert state = 1 (incoming = 1)
          * if state = 1 after ok packet state = 2, if error packet, remove entry (incoming = 0)
@@ -332,24 +328,24 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         /*
             Client                                      Server
             ==========================================================
-                                             <           handshake
+                                             <              handshake
             auth    >    AfterAuthPacket 
-                        AfterOkPacket        <           auth ok| error         
+                        AfterOkPacket        <              auth ok| error
 
             1.sql     >    AfterSqlPacket 
-                        AfterResultPacket    <          resultset              
+                        AfterResultPacket    <              resultset
 
-            1.prepare  >   AfterPreparePacket      
-                        AfterPrepareOkPacket     <       prepare-ok             
+            1.prepare  >   AfterPreparePacket
+                        AfterPrepareOkPacket     <          prepare-ok
 
             2.execute  >   AfterSqlPacket
-                        AfterResultPacket      <         resultset               
+                        AfterResultPacket      <            resultset
 
             stmt_close >
         */
 
         break;
-        
+
     default:
         break;
     }
@@ -369,12 +365,12 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     ASSERT(datalen > 0);
     ASSERT(data);
     ASSERT(mp && mp->hash && mp->pd);
- 
+
     uint16 lport, rport;
 
     lport = dport;
     rport = sport;
-  
+
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen);
 
@@ -533,9 +529,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 lport, rport, tv, NULL, cmd, user, 0, AfterAuthCompressPacket);
             dump(L_OK, "auth packet %s is compress, will filter", user);
         }
-
     }
-
     return OK;
 }
 
@@ -608,7 +602,6 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         ASSERT(cmd >= 0);
         ASSERT(strlen(sql) > 0);
 
-
         long num;
         ulong latency;
 
@@ -630,10 +623,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                fprintf(mp->dataLog, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
+                mp->addCache(mp, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
                     srcip, latency , num, user, sql, value);
             } else {
-                fprintf(mp->dataLog, "%-20.20s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
+                mp->addCache(mp, "%-20.20s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
                     latency, num, user, sql, value);
             }
         } else {
@@ -642,10 +635,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                fprintf(mp->dataLog, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s\n", tt,
+                mp->addCache(mp, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s\n", tt,
                     srcip, latency, num, user, sql);
             } else {
-                fprintf(mp->dataLog, "%-20.20s%-16lu%-10ld%-10.10s %s\n", tt,
+                mp->addCache(mp, "%-20.20s%-16lu%-10ld%-10.10s %s\n", tt,
                     latency, num, user, sql);
             }
         }
@@ -668,7 +661,6 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 lport, rport, tv, NULL, cmd, NULL, 0, AfterOkPacket);
         }
     } else if (AfterPreparePacket == status) {
-
         int stmt_id = ERR;
         int param_count = ERR;
 
