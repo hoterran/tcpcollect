@@ -7,6 +7,7 @@
 
 #include "utils.h"
 #include "log.h"
+#include "protocol.h"
 #include "mysqlpcap.h"
 #include "packet.h"
 #include "address.h"

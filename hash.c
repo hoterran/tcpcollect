@@ -33,6 +33,7 @@ struct session {
     uchar *lastData;
     size_t lastDataSize;
     ulong lastNum;
+    enum ProtoStage ps;      /* 0 is handle field_number, 1 is eof step, 2 is resultset step */
     uint32_t  tcp_seq;
     
     struct session *next;
@@ -205,7 +206,7 @@ int
 hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
          struct timeval *result, char **sql, char **user, char **value,
-         uchar ***lastData, size_t **lastDataSize, ulong **lastNum, uint **tcp_seq, int *cmd)
+         uchar ***lastData, size_t **lastDataSize, ulong **lastNum, enum ProtoStage **ps, uint **tcp_seq, int *cmd)
 {
     struct session *session;
     unsigned long port;
@@ -227,6 +228,7 @@ hash_get(struct hash *hash,
             *lastData = &(session->next->lastData);
             *lastDataSize = &(session->next->lastDataSize);
             *lastNum = &(session->next->lastNum);
+            *ps = &(session->next->ps);
             *tcp_seq = &(session->next->tcp_seq);
             *cmd = session->next->cmd;
 

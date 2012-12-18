@@ -69,6 +69,7 @@ ulong lcb_length(char *packet);
 uchar **lastData;
 size_t *lastDataSize;
 ulong *lastNum;
+enum ProtoStage *lastPs;
 /*
     -1 auth
     -2 auth compress
@@ -143,7 +144,7 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
 
 ulong
 parse_result(char* payload, uint32 payload_len,
-    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum) {
+    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps) {
 
     ulong ret;
     char *newData = NULL;
@@ -151,6 +152,7 @@ parse_result(char* payload, uint32 payload_len,
     lastData = myLastData;
     lastDataSize = myLastDataSize;
     lastNum = myLastNum;
+    lastPs = ps;
 
     if (lastData && *lastData) {
 
@@ -170,7 +172,14 @@ parse_result(char* payload, uint32 payload_len,
         free(*lastData);
         *lastData = NULL;
 
-        ret = resultset_packet(newData, payload_len + *lastDataSize, *lastNum);
+        if (*lastPs == RESULT_STAGE) {
+            ret = resultset_packet(newData, payload_len + *lastDataSize, *lastNum);
+        } else if (*lastPs == FIELD_STAGE) {
+            ret = field_packet(newData, payload_len + *lastDataSize, *lastNum); 
+        } else {
+            ASSERT(*lastPs == EOF_STAGE);
+            ret = eof_packet(newData, payload_len + *lastDataSize);
+        }
 
         free(newData); 
         newData = NULL;
@@ -187,7 +196,7 @@ parse_result(char* payload, uint32 payload_len,
                 if (c == 0) {
                     return ok_packet(payload, payload_len);
                 } else if (c == 0xff) {
-                    return error_packet(payload, payload_len); 
+                    return error_packet(payload, payload_len);
                 } else {
                     /* resultset */
                     ulong field_number = net_field_length(payload + 4);
@@ -217,6 +226,15 @@ field_packet(char* payload, uint32 payload_len, ulong field_number) {
             }
         }
     }
+    /* field packet span two packet */
+    dump(L_DEBUG, "field span two packet");
+    ASSERT(*lastData == NULL);
+    *lastData = malloc(payload_len + 1);
+    memcpy(*lastData, payload, payload_len);
+    (*lastData)[payload_len] = 0;
+    *lastDataSize = payload_len;
+    *lastNum = field_number;
+    *lastPs = FIELD_STAGE;
     return -1;
 }
 
@@ -229,6 +247,16 @@ eof_packet(char* payload, uint32 payload_len) {
             return resultset_packet(payload + 4 + 5, payload_len - 4 - 5, 0); 
         }
     }
+    /* eof packet span two packet */
+    /*
+    printf("@@@@@@@@@@----%u-%d\n", payload_len, field_packet_length); 
+    ASSERT(*lastData == NULL);
+    *lastData = malloc(payload_len + 1);
+    memcpy(*lastData, payload, payload_len);
+    (*lastData)[payload_len] = 0;
+    *lastDataSize = payload_len;
+    *lastPs = EOF_STAGE;
+    */
     return -1;
 }
 
@@ -260,6 +288,7 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
     (*lastData)[payload_len] = 0;
     *lastDataSize = payload_len;
     *lastNum = num;
+    *lastPs = RESULT_STAGE;
 
     /*
     uchar *p; 

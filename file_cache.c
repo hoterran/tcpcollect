@@ -25,7 +25,7 @@ char G_one_cache[ONE_CACHE_MAX_SIZE];
 /* file or stdout */
 int fileCacheInit(MysqlPcap *mp) {
     ASSERT(mp);
-    FileCache *fc = mp->config = malloc(sizeof(FileCache));
+    FileCache *fc = mp->config = calloc(1, sizeof(FileCache));
 
     if (strlen(mp->cacheFileName) > 0) {
         fc->file = fopen(mp->cacheFileName, "a+");
@@ -36,7 +36,7 @@ int fileCacheInit(MysqlPcap *mp) {
 
     if (NULL == fc->file) fc->file = stdout;
 
-    fc->cache = malloc(CACHE_SIZE);
+    fc->cache = calloc(1, CACHE_SIZE);
     setbuffer(fc->file, fc->cache, CACHE_SIZE);
     mp->cacheFlushTime = time(NULL);
     return OK;

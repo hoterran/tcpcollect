@@ -42,12 +42,18 @@ enum enum_field_types {
     MYSQL_TYPE_GEOMETRY=255
 };
 
+enum ProtoStage {
+    FIELD_STAGE = '1',
+    EOF_STAGE = '2',
+    RESULT_STAGE = '3'
+};
+
 int is_sql (char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen);
 
 int parse_sql(char *payload, uint32 payload_len, char **sql, uint32 sqlSaveLen);
 
 ulong parse_result(char *payload, uint32 payload_len, 
-    uchar **myLastData, size_t *myLastDataSize, ulong *myLastNum);
+    uchar **myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps);
 
 char* parse_param(char *payload, uint32 payload_len, int param_count, 
     char *param_type, char *param, size_t param_len);

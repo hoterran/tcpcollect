@@ -120,7 +120,7 @@ start_packet(MysqlPcap *mp) {
 
     dump(L_OK, "Listen Device is %s, Filter is %s", mp->netDev, mp->filter);
 
-    if (strlen(mp->cacheFileName) > 0) {
+    if (strlen(mp->cacheConfigFileName) == 0) {
         mp->addCache(mp, "Listen Device is %s, Filter is %s\n", mp->netDev, mp->filter);
 
         if (mp->isShowSrcIp == 1) {
@@ -556,13 +556,15 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     uchar **lastData = NULL;
     size_t *lastDataSize = NULL;
     ulong *lastNum = NULL;
+    enum ProtoStage *ps = NULL;
+
     char *value = NULL;
     uint32_t *tcp_seq = NULL;
 
     /* TODO other hash_set must clear lastNum lastData, lastDataSize */
     int status = hash_get(mp->hash, src, dst,
         lport, rport, &tv2, &sql, &user, &value, &lastData, 
-        &lastDataSize, &lastNum, &tcp_seq, &cmd);
+        &lastDataSize, &lastNum, &ps, &tcp_seq, &cmd);
 
     if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
         return ERR; 
@@ -611,7 +613,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
            num = 1;
         } else {
             //resultset packet
-           num = parse_result(data, datalen, lastData, lastDataSize, lastNum);
+           num = parse_result(data, datalen, lastData, lastDataSize, lastNum, ps);
         }
 
         ASSERT((num == -2) || (num >= 0) || (num == -1));
@@ -646,7 +648,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     } else if (0 == status) {
             dump(L_DEBUG, "handshake packet or out packet but cant find session ");
     } else if (AfterAuthPacket == status) {
-        ulong state = parse_result(data, datalen, NULL, NULL, NULL);
+        ulong state = parse_result(data, datalen, NULL, NULL, NULL, NULL);
         ASSERT( (state == ERR) || (state == OK) );
 
         if (unlikely(state == ERR)) {
