@@ -44,7 +44,7 @@ int hash_free(struct hash *hash);
 
 int hash_get_status(struct hash *hash,
      uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-     char **sql, uint32 *sqlSaveLen);
+     char **sql, uint32 *sqlSaveLen, uint32 **tcp_seq);
 
 int hash_get(struct hash *hash,
     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,

@@ -40,7 +40,7 @@ int process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv);
 
 int 
 inbound(MysqlPcap *mp, char* data, uint32 datalen, 
-    uint16 dport, uint16 sport, uint32 dst, uint32 src, struct timeval tv);
+    uint16 dport, uint16 sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp);
 
 int 
 outbound(MysqlPcap *mp, char* data, uint32 datalen, 
@@ -310,7 +310,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
             /* ignore remote MySQL port connect locate random port */
             if ((dport != mp->mysqlPort))
                 break;
-            inbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv); 
+            inbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv, tcp); 
         } else {
             /* ignore locate random port connect remote MySQL port */
             if (sport != mp->mysqlPort)
@@ -363,13 +363,14 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
 int 
 inbound(MysqlPcap *mp, char* data, uint32 datalen, 
-    uint16 dport, uint16 sport, uint32 dst, uint32 src, struct timeval tv) {
+    uint16 dport, uint16 sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp) {
 
     char *sql = NULL, *user = NULL;
     int cmd = ERR;
     int ret = ERR;
     int status = ERR;
     uint32 sqlSaveLen = 0;
+    uint32_t *tcp_seq = NULL;
 
     ASSERT(datalen > 0);
     ASSERT(data);
@@ -381,7 +382,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     rport = sport;
 
     status = hash_get_status(mp->hash, dst, src,
-        lport, rport, &sql, &sqlSaveLen);
+        lport, rport, &sql, &sqlSaveLen, &tcp_seq);
 
     if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
         return ERR; 
@@ -392,6 +393,25 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         hash_set(mp->hash, dst, src, 
             lport, rport, tv, NULL, 0, NULL, 0, AfterAuthPwPacket);
         return OK;
+    }
+
+    /* only filter sql repeat packet */
+    if (AfterSqlPacket == status) {
+        if (*tcp_seq == 0) {
+            *tcp_seq = ntohl(tcp->seq) + datalen;
+            dump(L_DEBUG, "first receive packet");
+        } else {
+            if (*tcp_seq == ntohl(tcp->seq)) {
+                *tcp_seq = ntohl(tcp->seq) + datalen;
+                dump(L_DEBUG, "sql continues packet %u", datalen);
+            } else {
+                if (*tcp_seq > ntohl(tcp->seq)) {
+                    dump(L_DEBUG, "sql repeat packet %u", datalen);
+                    return ERR;
+                }
+                return ERR;
+            }
+        }
     }
     if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
         ASSERT(user == NULL);
@@ -659,6 +679,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                     latency, num, user, sql);
             }
         }
+        *tcp_seq = 0;
         //hash_print(mp->hash); 
     } else if (0 == status) {
             dump(L_DEBUG, "handshake packet or out packet but cant find session ");
