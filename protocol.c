@@ -142,7 +142,7 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
  *  if a complete resultset size larger than tcp packet will failure
 */
 
-ulong
+long
 parse_result(char* payload, uint32 payload_len,
     uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps) {
 
@@ -197,6 +197,9 @@ parse_result(char* payload, uint32 payload_len,
                     return ok_packet(payload, payload_len);
                 } else if (c == 0xff) {
                     return error_packet(payload, payload_len);
+                } else if (c == 0xfe) {
+                    dump(L_OK, "secure-auth packet"); 
+                    return -3;
                 } else {
                     /* resultset */
                     ulong field_number = net_field_length(payload + 4);
@@ -206,7 +209,7 @@ parse_result(char* payload, uint32 payload_len,
                         payload_len - 4 - field_lcb_length, field_number);
                 }
            }
-        } 
+        }
         return -1;
     }
 }

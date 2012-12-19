@@ -52,7 +52,7 @@ int is_sql (char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen);
 
 int parse_sql(char *payload, uint32 payload_len, char **sql, uint32 sqlSaveLen);
 
-ulong parse_result(char *payload, uint32 payload_len, 
+long parse_result(char *payload, uint32 payload_len, 
     uchar **myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps);
 
 char* parse_param(char *payload, uint32 payload_len, int param_count, 

@@ -328,20 +328,29 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         /*
             Client                                      Server
             ==========================================================
-                                             <              handshake
-            auth    >    AfterAuthPacket 
-                        AfterOkPacket        <              auth ok| error
+                                                    <          handshake
+            auth        >   AfterAuthPacket 
+                            AfterOkPacket           <          auth ok| error
 
-            1.sql     >    AfterSqlPacket 
-                        AfterResultPacket    <              resultset
+            1.sql       >   AfterSqlPacket 
+                            AfterResultPacket       <          resultset
 
-            1.prepare  >   AfterPreparePacket
-                        AfterPrepareOkPacket     <          prepare-ok
+            1.prepare   >   AfterPreparePacket
+                            AfterPrepareOkPacket    <          prepare-ok
 
-            2.execute  >   AfterSqlPacket
-                        AfterResultPacket      <            resultset
+            2.execute   >   AfterSqlPacket
+                            AfterResultPacket       <          resultset
 
-            stmt_close >
+            stmt_close  >
+
+            ----------------------secure-auth--------------------
+                                                <          handshake
+            auth        >   AfterAuthPacket 
+                            AfterAuthEofPacket  <          eof packet
+            password    >   AfterAuthPwPacket
+                            AfterOkPacket       <          auth ok| error
+
+
         */
 
         break;
@@ -378,6 +387,12 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         return ERR; 
     }
 
+    if ((status == AfterAuthEofPacket)) {
+        /* here is scramble232 password */ 
+        hash_set(mp->hash, dst, src, 
+            lport, rport, tv, NULL, 0, NULL, 0, AfterAuthPwPacket);
+        return OK;
+    }
     if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
         ASSERT(user == NULL);
 
@@ -647,18 +662,19 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         //hash_print(mp->hash); 
     } else if (0 == status) {
             dump(L_DEBUG, "handshake packet or out packet but cant find session ");
-    } else if (AfterAuthPacket == status) {
-        ulong state = parse_result(data, datalen, NULL, NULL, NULL, NULL);
-        ASSERT( (state == ERR) || (state == OK) );
-
+    } else if ((AfterAuthPacket == status) || (AfterAuthPwPacket == status)) {
+        long state = parse_result(data, datalen, NULL, NULL, NULL, NULL);
+        ASSERT( (state == ERR) || (state == OK) || (state == -3));
         if (unlikely(state == ERR)) {
-            // auth error packet
-            dump(L_DEBUG, "error packet ");
+            dump(L_DEBUG, "auth error packet ");
             hash_get_rem(mp->hash, src, dst, 
                 lport, rport, NULL, NULL, NULL);
+        } else if (state == -3) {
+            dump(L_DEBUG, "secure auth eof packet ");
+            hash_set(mp->hash, src, dst, 
+                lport, rport, tv, NULL, cmd, NULL, 0, AfterAuthEofPacket);
         } else {
-            // auth ok packet
-            dump(L_DEBUG, "ok packet ");
+            dump(L_DEBUG, "auth ok packet ");
             hash_set(mp->hash, src, dst, 
                 lport, rport, tv, NULL, cmd, NULL, 0, AfterOkPacket);
         }

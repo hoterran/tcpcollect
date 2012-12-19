@@ -22,7 +22,6 @@
 #if !defined(STATS_HASH_H)
 #define STATS_HASH_H
 
-
 enum SessionStatus {    AfterAuthPacket = 1, 
                         AfterOkPacket,
                         AfterSqlPacket,
@@ -31,7 +30,10 @@ enum SessionStatus {    AfterAuthPacket = 1,
                         AfterPreparePacket,
                         AfterPrepareOkPacket,
                         AfterAuthCompressPacket,
-                        AfterFilterUserPacket
+                        AfterFilterUserPacket,
+
+                        AfterAuthEofPacket,
+                        AfterAuthPwPacket,
                         };
 
 struct hash;
