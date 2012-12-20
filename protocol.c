@@ -136,9 +136,10 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
 }
 
 /*
- *  ok
- *  error
- *  resultset
+ *  0 ok
+ *  -1 error
+ *  -2 half resultset
+ *  -3 secure compress packet
  *  if a complete resultset size larger than tcp packet will failure
 */
 
@@ -211,7 +212,8 @@ parse_result(char* payload, uint32 payload_len,
                 }
            }
         }
-        return -1;
+        ASSERT(NULL);
+        return -2;
     }
 }
 
@@ -241,7 +243,7 @@ field_packet(char* payload, uint32 payload_len, ulong field_number) {
     *lastDataSize = payload_len;
     *lastNum = field_number;
     *lastPs = FIELD_STAGE;
-    return -1;
+    return -2;
 }
 
 ulong
@@ -262,7 +264,7 @@ eof_packet(char* payload, uint32 payload_len) {
     (*lastData)[payload_len] = 0;
     *lastDataSize = payload_len;
     *lastPs = EOF_STAGE;
-    return -1;
+    return -2;
 }
 
 ulong

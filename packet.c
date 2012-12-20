@@ -306,6 +306,8 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
         char *data = (char*) ((uchar *) tcp + tcp->doff * 4);
 
+        dump(L_DEBUG,"is_in:%c-datalen:%d-tcp:%u %u-%u", incoming, datalen, tcp->seq, dport,sport);
+
         if (incoming == '1') {
             /* ignore remote MySQL port connect locate random port */
             if ((dport != mp->mysqlPort))
@@ -400,12 +402,14 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
     if (AfterOkPacket == status) {
         *tcp_seq = ntohl(tcp->seq) + datalen;
-        dump(L_DEBUG, "first receive packet");
+        dump(L_DEBUG, "after resultset first receive packet");
     }
     /* only filter sql repeat packet */
     if (AfterSqlPacket == status) {
-        ASSERT(*tcp_seq > 0);
-        if (*tcp_seq == ntohl(tcp->seq)) {
+        if (*tcp_seq == 0) {
+            *tcp_seq =ntohl(tcp->seq) + datalen;
+             dump(L_DEBUG, "first receive packet");
+        } else if (*tcp_seq == ntohl(tcp->seq)) {
             *tcp_seq = ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "sql continues packet %u", datalen);
         } else {
