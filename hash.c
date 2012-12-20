@@ -533,30 +533,34 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             }
             session->next->tv = value;
 
-            if (session->next->sql) {
-                free(session->next->sql);
-                session->next->sql = NULL;
-            }
-            if (sql) {
-                sqlLen = strlen(sql) ;
-                sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
-                if (sqlLen == SQL_MAX_LEN) {
-                    sql[SQL_MAX_LEN - 1] = '.'; 
-                    sql[SQL_MAX_LEN - 2] = '.'; 
-                    sql[SQL_MAX_LEN - 3] = '.'; 
+            if (sql != session->next->sql) {
+                if (sql) {
+                    if (session->next->sql) {
+                        free(session->next->sql);
+                        session->next->sql = NULL;
+                    }
+                    sqlLen = strlen(sql) ;
+                    sqlLen = sqlLen > SQL_MAX_LEN ? SQL_MAX_LEN:sqlLen;
+                    if (sqlLen == SQL_MAX_LEN) {
+                        sql[SQL_MAX_LEN - 1] = '.'; 
+                        sql[SQL_MAX_LEN - 2] = '.'; 
+                        sql[SQL_MAX_LEN - 3] = '.'; 
+                    }
+                    session->next->sql = malloc(sqlLen + 1);
+                    snprintf(session->next->sql, sqlLen + 1, "%s", sql);
                 }
-                session->next->sql = malloc(sqlLen + 1);
-                snprintf(session->next->sql, sqlLen + 1, "%s", sql);
             }
             session->next->cmd = cmd;
 
-            if (user) {
-                if (session->next->user) {
-                    free(session->next->user);
-                    session->next->user = NULL;
+            if (user != session->next->user) {
+                if (user) {
+                    if (session->next->user) {
+                        free(session->next->user);
+                        session->next->user = NULL;
+                    }
+                    session->next->user = malloc(strlen(user) + 1);
+                    snprintf(session->next->user, strlen(user) + 1, "%s", user);
                 }
-                session->next->user = malloc(strlen(user) + 1);
-                snprintf(session->next->user, strlen(user) + 1, "%s", user);
             }
             if (status)
                 session->next->status = status;
