@@ -198,6 +198,7 @@ parse_result(char* payload, uint32 payload_len,
                 } else if (c == 0xff) {
                     return error_packet(payload, payload_len);
                 } else if (c == 0xfe) {
+                    /* some COM return is eof, but will never go here */
                     dump(L_OK, "secure-auth packet"); 
                     return -3;
                 } else {
@@ -217,6 +218,8 @@ parse_result(char* payload, uint32 payload_len,
 ulong
 field_packet(char* payload, uint32 payload_len, ulong field_number) {
 
+    ASSERT(payload_len < 16777216);
+
     if (field_number == 0)
         return eof_packet(payload, payload_len);
     else {
@@ -230,7 +233,7 @@ field_packet(char* payload, uint32 payload_len, ulong field_number) {
         }
     }
     /* field packet span two packet */
-    dump(L_DEBUG, "field span two packet");
+    dump(L_OK, "field span two packet");
     ASSERT(*lastData == NULL);
     *lastData = malloc(payload_len + 1);
     memcpy(*lastData, payload, payload_len);
@@ -245,27 +248,27 @@ ulong
 eof_packet(char* payload, uint32 payload_len) {
 
     if (payload_len > 4) {
-        uchar c = payload[4]; 
+        uchar c = payload[4];
         if (c == 0xfe) {
-            return resultset_packet(payload + 4 + 5, payload_len - 4 - 5, 0); 
+            if (payload_len > 9)
+                return resultset_packet(payload + 4 + 5, payload_len - 4 - 5, 0);
         }
     }
     /* eof packet span two packet */
-    /*
-    printf("@@@@@@@@@@----%u-%d\n", payload_len, field_packet_length); 
+    dump(L_OK, "eof span two packet %u\n", payload_len);
     ASSERT(*lastData == NULL);
     *lastData = malloc(payload_len + 1);
     memcpy(*lastData, payload, payload_len);
     (*lastData)[payload_len] = 0;
     *lastDataSize = payload_len;
     *lastPs = EOF_STAGE;
-    */
     return -1;
 }
 
 ulong
 resultset_packet(char *payload, uint32 payload_len, ulong num) {
 
+    ASSERT(payload_len < 16777216);
     int resultset_packet_length = 0;
     if (payload_len > 4) {
         resultset_packet_length = uint3korr(payload);

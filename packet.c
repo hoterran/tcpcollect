@@ -133,7 +133,7 @@ start_packet(MysqlPcap *mp) {
             mp->addCache(mp, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "---------", "-----------", "----", "----", "---");
         }
 
-        mp->flushCache(mp);
+        mp->flushCache(mp, 1);
     }
 
     while(1) {
@@ -158,7 +158,7 @@ start_packet(MysqlPcap *mp) {
             dump(L_DEBUG, "timeout~~~~ %d %ld", ret, mp->fakeNow);
         }
         /* flush cache, actually is flush by user */
-        mp->flushCache(mp);
+        mp->flushCache(mp, 0);
         /* 
          * each INTERVAL do below
          * 1. reload address 
@@ -317,6 +317,9 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                 break;
             outbound(mp, data, datalen, dport, sport, ip->ip_dst.s_addr, ip->ip_src.s_addr, tv, tcp, dst); 
         }
+        mp->is_in = incoming;
+        mp->datalen = datalen;
+        mp->tcp_seq = tcp->seq;
 
         /* internal 
          * receive auth, insert state = 1 (incoming = 1)
@@ -415,6 +418,28 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     }
     if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
         ASSERT(user == NULL);
+        /* compress protocol */
+        if ((COM_QUIT <= cmd) && (cmd < COM_END)) {
+            if (cmd == COM_QUIT) {
+                if (datalen != 5) {
+                    dump(L_OK, " compress sql ");
+                    hash_set(mp->hash, dst, src, 
+                        lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
+                    return ERR;
+                }
+            }
+            if ((datalen > 7 ) && ( data[7] == '\0')) {
+                dump(L_OK, " compress sql ");
+                hash_set(mp->hash, dst, src, 
+                    lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
+                return ERR;
+            }
+        } else {
+            dump(L_OK, " compress sql ");
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
+            return ERR;
+        }
 
         /* COM_ packet */
         if (unlikely(cmd == COM_QUIT)) {
@@ -428,7 +453,8 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             /* TODO prepare sql is possible too long */
             ASSERT(ret == 0);
             ASSERT(sql);
-            ASSERT(strlen(sql) > 0);
+            /* exists length 0 sql */
+            //ASSERT(strlen(sql) > 0);
             dump(L_DEBUG, "prepare packet %s %d", sql, cmd);
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, sql, cmd, NULL, ret, AfterPreparePacket);
@@ -506,6 +532,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "shutdown");
             hash_set(mp->hash, dst, src, 
                 lport, rport, tv, "shutdown", cmd, NULL, 0, AfterSqlPacket);
+        } else if (unlikely(cmd == COM_INIT_DB)) {
+            dump(L_DEBUG, "init_db");
+            hash_set(mp->hash, dst, src, 
+                lport, rport, tv, "init_db", cmd, NULL, 0, AfterSqlPacket);
         } else if (likely(cmd > 0)) {
             //ASSERT((cmd == COM_QUERY) || (cmd == COM_INIT_DB));
             /*
@@ -521,7 +551,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             }
 
             ASSERT(sql);
-            ASSERT(strlen(sql)>0);
+            //ASSERT(strlen(sql)>0);
             dump(L_DEBUG, "sql packet [%s] %d", sql, cmd);
             if (sqlSaveLen > 0) { 
                 hash_set_sql_len(mp->hash, dst, src, 
@@ -637,7 +667,8 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
 
     if (likely(AfterSqlPacket == status)) {
         ASSERT(cmd >= 0);
-        ASSERT(strlen(sql) > 0);
+        ASSERT(sql);
+        //ASSERT(strlen(sql) > 0);
 
         long num;
         ulong latency;

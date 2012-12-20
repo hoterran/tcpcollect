@@ -6,7 +6,7 @@ typedef struct _MysqlPcap MysqlPcap;
 
 typedef int (*initFp) (MysqlPcap *);
 typedef void (*addFp) (MysqlPcap *, const char *fmt, ...);
-typedef void (*flushFp) (MysqlPcap *);
+typedef void (*flushFp) (MysqlPcap *, int force);
 
 #include <pcap.h>
 #include <sys/time.h>
@@ -31,6 +31,10 @@ struct _MysqlPcap {
     time_t      fakeNow;
     time_t      lastReloadAddressTime;
     long        packetSeq;          /* packet sequence */
+    /* for debug */
+    ulong       datalen;
+    char        is_in;
+    uint32    tcp_seq;
 
     /* cache */
     initFp      initCache;

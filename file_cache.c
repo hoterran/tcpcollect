@@ -53,11 +53,16 @@ void fileCacheAdd(MysqlPcap *mp, const char *fmt, ...) {
     fprintf(fc->file, "%s", G_one_cache);
 }
 
-void fileCacheFlush(MysqlPcap* mp) {
+void fileCacheFlush(MysqlPcap* mp, int force) {
     ASSERT(mp);
     FileCache *fc = mp->config;
-    if (mp->fakeNow - mp->cacheFlushTime > FLUSH_INTERVAL) {
+    if (force == 1)
         fflush(fc->file);
-        mp->cacheFlushTime = mp->fakeNow;
+    else {
+        if (mp->fakeNow - mp->cacheFlushTime > FLUSH_INTERVAL) {
+            fflush(fc->file);
+            mp->cacheFlushTime = mp->fakeNow;
+        }
     }
 }
+
