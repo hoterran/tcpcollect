@@ -284,7 +284,7 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
             uchar c = payload[4];
             if (c == 0xfe)
                 return num;
-            else if (c == 0xff)
+            else if (c == 0xff) /* after resultset, last packet can be error packet */
                 return error_packet(payload, payload_len);
         }
     }

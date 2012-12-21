@@ -54,15 +54,15 @@ void fileCacheAdd(MysqlPcap *mp, const char *fmt, ...) {
 }
 
 void fileCacheFlush(MysqlPcap* mp, int force) {
-    ASSERT(mp);
+    ASSERT(mp && mp->config);
     FileCache *fc = mp->config;
-    if (force == 1)
-        fflush(fc->file);
-    else {
-        if (mp->fakeNow - mp->cacheFlushTime > FLUSH_INTERVAL) {
-            fflush(fc->file);
-            mp->cacheFlushTime = mp->fakeNow;
-        }
+    ASSERT(mp->fakeNow > mp->cacheFlushTime);
+
+    /* not force flush and not on time would return */
+    if ((force == 0) && (mp->fakeNow - mp->cacheFlushTime <= FLUSH_INTERVAL)) {
+        return;
     }
+    fflush(fc->file);
+    mp->cacheFlushTime = mp->fakeNow;
 }
 
