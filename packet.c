@@ -305,8 +305,9 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         }
 
         char *data = (char*) ((uchar *) tcp + tcp->doff * 4);
-
-        dump(L_DEBUG,"is_in:%c-datalen:%d-tcp:%u %u-%u", incoming, datalen, tcp->seq, dport,sport);
+        dump(L_DEBUG,
+            "is_in:%c-datalen:%d-tcp:%u %u-%u", 
+            incoming, datalen, ntohl(tcp->seq), dport,sport);
 
         if (incoming == '1') {
             /* ignore remote MySQL port connect locate random port */
@@ -414,7 +415,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "sql continues packet %u", datalen);
         } else {
             if (*tcp_seq > ntohl(tcp->seq)) {
-                dump(L_DEBUG, "sql repeat packet %u", datalen);
+                dump(L_DEBUG, "sql repeat packet %u %u %u", datalen, tcp_seq, ntohl(tcp->seq));
                 return ERR;
             }
             return ERR;
@@ -670,7 +671,8 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         }
     }
 
-    if (likely(AfterSqlPacket == status)) {
+    /* if multistatement, AfterOkPacket will come here */
+    if (likely(AfterSqlPacket == status) || (AfterOkPacket == status)) {
         ASSERT(cmd >= 0);
         ASSERT(sql);
         //ASSERT(strlen(sql) > 0);

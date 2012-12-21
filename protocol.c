@@ -212,6 +212,7 @@ parse_result(char* payload, uint32 payload_len,
                 }
            }
         }
+        dump(L_DEBUG, "%u", payload_len);
         ASSERT(NULL);
         return -2;
     }
