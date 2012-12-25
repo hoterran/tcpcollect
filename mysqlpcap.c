@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <pcap.h>
 #include <time.h>
+#include <libgen.h>
 
 #include "utils.h"
 #include "log.h"
@@ -45,6 +46,8 @@ int init(MysqlPcap *mp) {
 
 int main (int argc, char **argv) {
 
+    chdir(dirname(argv[0]));
+    //#TODO log save pos?
     log_init("mysqlpcap", NULL, ".log", L_OK);
 
     char usage[] = "Usage: \n\tmysqlpcap -p [port] mysql listen port default 3306\n"
