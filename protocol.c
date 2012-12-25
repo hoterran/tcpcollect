@@ -81,6 +81,10 @@ is_sql(char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen) {
     if (sqlSaveLen > 0)
         return COM_QUERY;
 
+    if (payload_len < 5) {
+        dump(L_ERR, "chao packets %u", payload_len);
+        return -3; 
+    } 
     int packet_length = uint3korr(payload);
 
     if (payload_len >= packet_length + 4) {

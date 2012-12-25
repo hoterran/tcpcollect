@@ -4,11 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "c.h"
 #define INSERT_SQL "insert into player_copy(id, name) values(?, ?)"
 
 void main(int argc, char **argv)
 {
-    MYSQL mysql,*sock;
+    MYSQL *mysql,*sock;
     MYSQL_STMT *st;
     MYSQL_BIND bind[2];
 
@@ -19,21 +20,21 @@ void main(int argc, char **argv)
     unsigned long str_length;
     my_bool is_null;
 
-    mysql_init(&mysql);
-    if (!(sock = mysql_real_connect(&mysql, "127.0.0.1", "root", "root", "test", 3306, NULL, 0))) {
-        fprintf(stderr, "Couldn't connect to engine!\n%s\n\n", mysql_error(&mysql));
+    mysql = mysql_init(NULL);
+    if (!(sock = CONN(0))) {
+        fprintf(stderr, "Couldn't connect to engine!\n%s\n\n", mysql_error(mysql));
         perror("");
         exit(1);
     }
 
     mysql_query(sock, "create table player_copy (id int, name varchar(20))");
 
-    st = mysql_stmt_init(&mysql);
+    st = mysql_stmt_init(mysql);
     mysql_stmt_prepare(st, INSERT_SQL, 47);
     param_count = mysql_stmt_param_count(st);
     fprintf(stdout, " total parameters in INSERT: %d\n", param_count);
 
-    for (i = 1; i < 10000; i ++) {
+    for (i = 1; i < 1000; i ++) {
         int_data = i;
         str_data[0] = 'a';
         str_data[1] = 'b';

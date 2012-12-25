@@ -3,16 +3,17 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include "c.h"
 
 int main(int argc, char* argv[])
 {
-    MYSQL mysql,*sock;
+    MYSQL *mysql,*sock;
     MYSQL_ROW row;
     MYSQL_RES *result;
 
-    mysql_init(&mysql);
-    if (!(sock = mysql_real_connect(&mysql, "127.0.0.1", "root", "root", "test", 3306, NULL, CLIENT_MULTI_STATEMENTS))) {
-        fprintf(stderr, "Couldn't connect to engine!\n%s\n\n", mysql_error(&mysql));
+    mysql = mysql_init(NULL);
+    if (!(sock = CONN(CLIENT_MULTI_STATEMENTS))) {
+        fprintf(stderr, "Couldn't connect to engine!\n%s\n\n", mysql_error(mysql));
         perror("");
         exit(1);
     }

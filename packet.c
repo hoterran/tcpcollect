@@ -306,7 +306,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         }
 
         char *data = (char*) ((uchar *) tcp + tcp->doff * 4);
-        dump(L_DEBUG, "is_in:%c-datalen:%d-tcp:%u %u-%u", incoming, datalen, ntohl(tcp->seq), dport,sport);
+        dump(L_DEBUG, "is_in:%c-datalen:%d-tcp:%u [%u]-[%u]", incoming, datalen, ntohl(tcp->seq), dport,sport);
 
         if (incoming == '1') {
             /* ignore remote MySQL port connect locate random port */
@@ -398,20 +398,31 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     }
 
     if (AfterOkPacket == status) {
+        /* omit chaos packet */
+        if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] <= COM_QUIT)) {
+            dump(L_ERR, "sql first chao order sql %u %u", datalen , ntohl(tcp->seq));
+            return ERR;
+        }
         *tcp_seq = ntohl(tcp->seq) + datalen;
         dump(L_DEBUG, "after resultset first receive packet");
     }
     /* only filter sql repeat packet */
     if (AfterSqlPacket == status) {
         if (*tcp_seq == 0) {
+            /* omit chaos packet */
+            if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] <= COM_QUIT)) {
+                dump(L_ERR, "sql first chao order sql %u %u", datalen , ntohl(tcp->seq));
+                return ERR;
+            }
+
             *tcp_seq =ntohl(tcp->seq) + datalen;
-             dump(L_DEBUG, "first receive packet");
+             dump(L_DEBUG, "first receive sql");
         } else if (*tcp_seq == ntohl(tcp->seq)) {
             *tcp_seq = ntohl(tcp->seq) + datalen;
-            dump(L_DEBUG, "sql continues packet %u", datalen);
+            dump(L_DEBUG, "sql continues %u", datalen);
         } else {
             if (*tcp_seq > ntohl(tcp->seq)) {
-                dump(L_DEBUG, "sql repeat packet %u %u %u", datalen, tcp_seq, ntohl(tcp->seq));
+                dump(L_DEBUG, "sql repeat %u %u %u", datalen, tcp_seq, ntohl(tcp->seq));
                 return ERR;
             }
             return ERR;
@@ -421,28 +432,30 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
         ASSERT(user == NULL);
 
-        /* compress protocol */
-        if ((COM_QUIT <= cmd) && (cmd < COM_END)) {
-            if (cmd == COM_QUIT) {
-                if (datalen != 5) {
+        /* guess sql is compress protocol ?*/ 
+        if (sqlSaveLen == 0) { 
+            if ((COM_QUIT <= cmd) && (cmd < COM_END)) {
+                if (cmd == COM_QUIT) {
+                    if (datalen != 5) {
+                        dump(L_OK, " compress sql ");
+                        hash_set(mp->hash, dst, src, 
+                            lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
+                        return ERR;
+                    }
+                }
+                if ((cmd != COM_STMT_EXECUTE) && (status != AfterPreparePacket) 
+                    && (datalen > 7 ) && ( data[7] == '\0')) {
                     dump(L_OK, " compress sql ");
                     hash_set(mp->hash, dst, src, 
                         lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
                     return ERR;
                 }
-            }
-            if ((cmd != COM_STMT_EXECUTE) && (status != AfterPreparePacket) 
-                && (datalen > 7 ) && ( data[7] == '\0')) {
+            } else {
                 dump(L_OK, " compress sql ");
                 hash_set(mp->hash, dst, src, 
                     lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
                 return ERR;
             }
-        } else {
-            dump(L_OK, " compress sql ");
-            hash_set(mp->hash, dst, src, 
-                lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
-            return ERR;
         }
 
         /* COM_ packet */
@@ -566,6 +579,9 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_ERR, "why here %d %u %u %s", cmd, status, datalen, sql);
             ASSERT(NULL);
         }
+    } else if (cmd == -3) {
+       /* too short packet, possible test */
+       return ERR;
     } else {
         ASSERT(user);
         ASSERT((cmd == -2) || (cmd == -1));
@@ -635,8 +651,17 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
         return ERR; 
     }
+
     if (status > 0) {
         if (*tcp_seq == 0) {
+            if (likely((AfterSqlPacket == status) || (AfterOkPacket == status))) {
+                /* this is packet is resultset first packet */
+                /* 0x 0x 00 01 */
+                if ((data[2] != '\0') || (data[3] != '\1')) {
+                    dump(L_ERR, "first result packet is chao order %u %u", datalen, ntohl(tcp->seq));
+                    return ERR; 
+                }
+            }
             *tcp_seq =ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "first receive packet");
         } else {
