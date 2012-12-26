@@ -587,6 +587,9 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     lport, rport, ret, AfterSqlPacket);
             } else {
                 // 1.
+                if (ret == 0) {
+                    status = AfterSqlPacket;
+                }
                 hash_set(mp->hash, dst, src, 
                     lport, rport, tv, sql, cmd, NULL, ret, status);
             }   

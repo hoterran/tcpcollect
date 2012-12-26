@@ -530,7 +530,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->lport == lport
         ) {
             session->next->sqlSaveLen = sqlSaveLen;
-            if ((status == AfterSqlPacket) || (status == AfterPreparePacket) || (status == AfterOkPacket))
+            if ((status == AfterSqlPacket) || (status == AfterPreparePacket))
                 session->next->tcp_seq = 0;
             if (session->next->param) {
                 free(session->next->param);
