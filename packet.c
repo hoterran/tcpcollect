@@ -398,25 +398,37 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     }
 
     if (AfterOkPacket == status) {
+        /* must 0x 0x 00 00 03 */
         /* omit chaos packet */
-        if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] <= COM_QUIT)) {
-            dump(L_ERR, "sql first chao order sql %u %u", datalen , ntohl(tcp->seq));
-            return ERR;
-        }
-        *tcp_seq = ntohl(tcp->seq) + datalen;
-        dump(L_DEBUG, "after resultset first receive packet");
-    }
-    /* only filter sql repeat packet */
-    if (AfterSqlPacket == status) {
-        if (*tcp_seq == 0) {
-            /* omit chaos packet */
-            if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] <= COM_QUIT)) {
-                dump(L_ERR, "sql first chao order sql %u %u", datalen , ntohl(tcp->seq));
+        if (sqlSaveLen == 0) {
+            if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] < COM_QUIT)) {
+                dump(L_ERR, "sql first chao order sql %u %u", datalen, ntohl(tcp->seq));
                 return ERR;
             }
-
             *tcp_seq =ntohl(tcp->seq) + datalen;
-             dump(L_DEBUG, "first receive sql");
+            dump(L_DEBUG, "first receive sql");
+        } else {
+            if (*tcp_seq == ntohl(tcp->seq)) {
+                *tcp_seq = ntohl(tcp->seq) + datalen;
+                dump(L_DEBUG, "sql continues %u", datalen);
+            } else {
+                if (*tcp_seq > ntohl(tcp->seq)) {
+                    dump(L_DEBUG, "sql repeat %u %u %u", datalen, tcp_seq, ntohl(tcp->seq));
+                    return ERR;
+                }   
+                return ERR;
+            }   
+        }
+    } else if (AfterSqlPacket == status) {
+        /* only filter sql repeat packet */
+        if (*tcp_seq == 0) {
+            /* omit chaos packet */
+            if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] < COM_QUIT)) {
+               dump(L_ERR, "sql first chao order sql %u %u", datalen, ntohl(tcp->seq));
+               return ERR;
+            }   
+            *tcp_seq =ntohl(tcp->seq) + datalen;
+            dump(L_DEBUG, "first receive sql");
         } else if (*tcp_seq == ntohl(tcp->seq)) {
             *tcp_seq = ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "sql continues %u", datalen);
@@ -424,10 +436,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             if (*tcp_seq > ntohl(tcp->seq)) {
                 dump(L_DEBUG, "sql repeat %u %u %u", datalen, tcp_seq, ntohl(tcp->seq));
                 return ERR;
-            }
+            }   
             return ERR;
-        }
-    }
+        }   
+    }   
 
     if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
         ASSERT(user == NULL);
@@ -568,13 +580,16 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
             ASSERT(sql);
             dump(L_DEBUG, "sql packet [%s] %d", sql, cmd);
-            if (sqlSaveLen > 0) { 
+
+            if (sqlSaveLen > 0) {
+                // 2.3.4
                 hash_set_sql_len(mp->hash, dst, src, 
-                    lport, rport, ret);
+                    lport, rport, ret, AfterSqlPacket);
             } else {
+                // 1.
                 hash_set(mp->hash, dst, src, 
-                    lport, rport, tv, sql, cmd, NULL, ret, AfterSqlPacket);
-            }
+                    lport, rport, tv, sql, cmd, NULL, ret, status);
+            }   
         } else {
             dump(L_ERR, "why here %d %u %u %s", cmd, status, datalen, sql);
             ASSERT(NULL);
@@ -657,7 +672,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
             if (likely((AfterSqlPacket == status) || (AfterOkPacket == status))) {
                 /* this is packet is resultset first packet */
                 /* 0x 0x 00 01 */
-                if ((data[2] != '\0') || (data[3] != '\1')) {
+                if ((data[2] != '\0')) {
                     dump(L_ERR, "first result packet is chao order %u %u", datalen, ntohl(tcp->seq));
                     return ERR; 
                 }

@@ -47,8 +47,7 @@ int init(MysqlPcap *mp) {
 int main (int argc, char **argv) {
 
     chdir(dirname(argv[0]));
-    //#TODO log save pos?
-    log_init("mysqlpcap", NULL, ".log", L_OK);
+    log_init("mysqlpcap", NULL, ".log", L_DEBUG);
 
     char usage[] = "Usage: \n\tmysqlpcap -p [port] mysql listen port default 3306\n"
                     "\t -d daemon default no\n "

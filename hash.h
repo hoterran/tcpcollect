@@ -60,7 +60,7 @@ int hash_set(struct hash *hash,
 
 int hash_set_sql_len(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         uint32_t sqlSaveLen);
+         uint32_t sqlSaveLen, int status);
          
 int hash_clean(struct hash *hash, unsigned long min);
 

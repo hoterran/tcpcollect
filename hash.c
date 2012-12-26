@@ -375,7 +375,7 @@ hash_get_param_count(struct hash *hash,
 int 
 hash_set_sql_len(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         uint32_t sqlSaveLen) {
+         uint32_t sqlSaveLen, int status) {
 
     struct session *session;
     unsigned long port;
@@ -390,7 +390,11 @@ hash_set_sql_len(struct hash *hash,
             session->next->lport == lport
         ) {
             session->next->sqlSaveLen = sqlSaveLen; 
-            if (sqlSaveLen == 0) session->next->tcp_seq = 0;
+            // last sql change status
+            if (sqlSaveLen == 0) {
+                session->next->status = status;
+                session->next->tcp_seq = 0;
+            }
             return 0;
         }
     }
@@ -526,7 +530,8 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->lport == lport
         ) {
             session->next->sqlSaveLen = sqlSaveLen;
-            if ((status == AfterSqlPacket) || (status == AfterPreparePacket)) session->next->tcp_seq = 0;
+            if ((status == AfterSqlPacket) || (status == AfterPreparePacket) || (status == AfterOkPacket))
+                session->next->tcp_seq = 0;
             if (session->next->param) {
                 free(session->next->param);
                 session->next->param = NULL; // prepare then a normal sql, need remove this
