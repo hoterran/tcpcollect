@@ -74,6 +74,7 @@ enum ProtoStage *lastPs;
     -1 auth
     -2 auth compress
     cmd cmd packet
+    -3 bad data
 */
 int
 is_sql(char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen) {
@@ -134,7 +135,7 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
         return 0; // cmd
     }
     /* sql is too long, sqlSaveLen */
-    payload[4 + packet_length] = '\0';
+    payload[payload_len - 1] = '\0';
     *sql = &payload[5];
     return packet_length - (payload_len - 4);
 }

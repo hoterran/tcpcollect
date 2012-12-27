@@ -530,8 +530,19 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->lport == lport
         ) {
             session->next->sqlSaveLen = sqlSaveLen;
-            if ((status == AfterSqlPacket) || (status == AfterPreparePacket))
+            if ((status == AfterSqlPacket) || (status == AfterPreparePacket)) {
+
                 session->next->tcp_seq = 0;
+
+                if (session->next->lastData) {
+                    free(session->next->lastData);
+                    session->next->lastData = NULL;
+                }
+                session->next->lastDataSize = 0;
+                session->next->lastNum = 0;
+                session->next->ps = 0;
+            }
+
             if (session->next->param) {
                 free(session->next->param);
                 session->next->param = NULL; // prepare then a normal sql, need remove this

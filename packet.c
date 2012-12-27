@@ -172,9 +172,9 @@ start_packet(MysqlPcap *mp) {
                 dump(L_OK, " reload address ");
                 free_addresses(mp->al);
                 mp->al = get_addresses();
-                mp->lastReloadAddressTime = time(NULL);
-                mp->fakeNow = mp->lastReloadAddressTime;
             }
+            mp->lastReloadAddressTime = time(NULL);
+            mp->fakeNow = mp->lastReloadAddressTime;
 
             dump(L_DEBUG, " delete idle connection ");
             hash_delete_idle(mp->hash, mp->fakeNow, 8 * RELOAD_ADDRESS_INTERVAL);
@@ -696,14 +696,6 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 pcap_stats(mp->pd, &ps);
                 dump(L_ERR, " error packet expect %u but %u drops:%u", *tcp_seq , ntohl(tcp->seq), ps.ps_drop); 
 
-                // skip error packet 
-                if (*lastData) {
-                    free(*lastData);
-                    *lastData = NULL;
-                }
-                *lastDataSize = 0;
-                *lastNum = 0;
-                // fast over this packet
                 return ERR;
             }
         }
