@@ -140,7 +140,7 @@ start_packet(MysqlPcap *mp) {
 
     while(1) {
         ret = pcap_dispatch(mp->pd, -1, process_packet, (u_char*)mp);
-        ASSERT(ret >=0);
+        ASSERT((ret >= 0) || (ret == -10));
 
         /* output drop packet percentage */
         if (GoutputPacketStatus == '1') {
@@ -151,14 +151,18 @@ start_packet(MysqlPcap *mp) {
         }
 
         /*
+         * pcap_dispatch return 0 not timeout 
          * avert each return systemcall time, only poll timeout call it
          * each 3 seconds call time(NULL) in maximum
          * ret > 0, we use mp->fakeNow as now, max deviation is smaller than 3 seconds
         */
-        if (ret == 0) {
-            mp->fakeNow = time(NULL);
-            dump(L_DEBUG, "timeout~~~~ %d %ld", ret, mp->fakeNow);
+        if (ret == -10) { 
+            time_t t = time(NULL);
+            if (t > mp->fakeNow) 
+                mp->fakeNow = t;
+            dump(L_ERR, "timeout2 ~~~~ %d %ld", ret, mp->fakeNow);
         }
+
         /* flush cache, actually is flush by user */
         mp->flushCache(mp, 0);
         /*
@@ -176,7 +180,9 @@ start_packet(MysqlPcap *mp) {
                 mp->al = get_addresses();
             }
             mp->lastReloadAddressTime = time(NULL);
-            mp->fakeNow = mp->lastReloadAddressTime;
+            if (mp->lastReloadAddressTime > mp->fakeNow) {
+                mp->fakeNow = mp->lastReloadAddressTime;
+            }
 
             dump(L_DEBUG, " delete idle connection ");
             hash_print(mp->hash);

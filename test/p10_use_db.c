@@ -19,21 +19,24 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    char *sql = "use mysql";
+    char *sql;
 
-    mysql_query(sock, sql);
+    int i;
 
-    result = mysql_store_result(mysql);
+    for(i = 0; i < 100000; i++) {
 
-    while(mysql_fetch_row(result));
+        mysql_select_db(sock, "test");
+/*
+        sql = "use test";
 
-    sql = "use test";
+        mysql_query(sock, sql);
+        sql = "use mysql";
 
-    mysql_query(sock, sql);
+        mysql_query(sock, sql);
+*/
 
-    result = mysql_store_result(mysql);
-
-    while(mysql_fetch_row(result));
+        mysql_select_db(sock, "mysql");
+    }
 
     mysql_close(mysql);
 
