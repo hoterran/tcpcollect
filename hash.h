@@ -48,15 +48,14 @@ int hash_get_status(struct hash *hash,
 
 int hash_get(struct hash *hash,
     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-    struct timeval *result, char **sql, char **user, char **value,
+    struct timeval *result, char **sql, char **user, char **db, char **value,
     uchar ***lastData, size_t **lastDataSize, ulong **lastNum, enum ProtoStage **ps, uint **tcpseq, int *cmd);
 
 int hash_get_rem(struct hash *hash,
-         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result, char** sql, char **user);
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport);
 int hash_set(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char* sql, int cmd, char *user, uint32_t sqlSaveLen, enum SessionStatus status);
+         struct timeval value, char* sql, int cmd, char *user, char *db, uint32_t sqlSaveLen, enum SessionStatus status);
 
 int hash_set_sql_len(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,

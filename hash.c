@@ -27,6 +27,7 @@ struct session {
     char *sql; // maxsize SQL_MAX_LEN
     uint32_t sqlSaveLen; 
     char *user;
+    char *db;
     int cmd;
     enum SessionStatus status; 
 
@@ -53,7 +54,6 @@ struct hash {
     unsigned long sz, count;
 };
 
-
 typedef void (*funcp)(struct hash *hash, struct session *session, void *arg);
 
 static int hash_loop(struct hash *hash, funcp func, void *arg);
@@ -72,6 +72,10 @@ static void funcp_del(struct hash *hash, struct session *session, void *arg) {
     if (session->next->user) {
         free(session->next->user);
         session->next->user = NULL;
+    }
+    if (session->next->db) {
+        free(session->next->db);
+        session->next->db = NULL;
     }
     if (session->next->param) {
         free(session->next->param);
@@ -107,7 +111,7 @@ static void funcp_delete_idle(struct hash *hash, struct session *session, void *
 
     /* compare */ 
     if ( (now - tv_t) >= idle_time) {
-        dump(L_OK, "del this slot [user:%s]", session->next->user);
+        dump(L_OK, "del this slot [user:%s db:%s]", session->next->user, session->next->db);
         funcp_del(hash, session, NULL);
     }
 }
@@ -141,7 +145,7 @@ static unsigned long
     hash_fun(uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport);
 static int hash_set_internal(struct session *sessions, unsigned long sz,
         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-        struct timeval tv, char *sql, int cmd, char *user, uint32 sqlSaveLen, enum SessionStatus status);
+        struct timeval tv, char *sql, int cmd, char *user, char *db, uint32 sqlSaveLen, enum SessionStatus status);
 static int hash_load_check(struct hash *hash);
 static unsigned long hash_newsz(unsigned long sz);
     
@@ -206,7 +210,7 @@ int hash_get_status(struct hash *hash,
 int
 hash_get(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result, char **sql, char **user, char **value,
+         struct timeval *result, char **sql, char **user, char **db, char **value,
          uchar ***lastData, size_t **lastDataSize, ulong **lastNum, enum ProtoStage **ps, uint **tcp_seq, int *cmd)
 {
     struct session *session;
@@ -224,6 +228,7 @@ hash_get(struct hash *hash,
             *result = session->next->tv;
             *sql = session->next->sql;
             *user = session->next->user;
+            *db = session->next->db;
             *value = session->next->param;
 
             *lastData = &(session->next->lastData);
@@ -241,8 +246,7 @@ hash_get(struct hash *hash,
 
 int
 hash_get_rem(struct hash *hash,
-         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval *result, char **sql, char **user)
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport)
 {
     struct session *session, *next;
     unsigned long port;
@@ -265,6 +269,10 @@ hash_get_rem(struct hash *hash,
             if (session->next->user) {
                 free(session->next->user);
                 session->next->user = NULL;
+            }
+            if (session->next->db) {
+                free(session->next->db);
+                session->next->db = NULL;
             }
             if (session->next->param) {
                 free(session->next->param);
@@ -293,12 +301,12 @@ hash_get_rem(struct hash *hash,
 int
 hash_set(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char *sql, int cmd, char *user, uint32_t sqlSaveLen, enum SessionStatus status)
+         struct timeval value, char *sql, int cmd, char *user, char *db, uint32_t sqlSaveLen, enum SessionStatus status)
 {
     hash_load_check(hash);
     
     if (hash_set_internal(hash->sessions, hash->sz,
-                             laddr, raddr, lport, rport, value, sql, cmd, user, sqlSaveLen, status))
+                             laddr, raddr, lport, rport, value, sql, cmd, user, db, sqlSaveLen, status))
     {
         hash->count ++;
         return 1;
@@ -514,7 +522,8 @@ hash_set_param (struct hash *hash,
 static int
 hash_set_internal(struct session *sessions, unsigned long sz,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         struct timeval value, char* sql, int cmd, char *user, uint32_t sqlSaveLen, enum SessionStatus status)
+         struct timeval value, char* sql, int cmd, char *user, char *db,
+         uint32_t sqlSaveLen, enum SessionStatus status)
 {
     struct session *session;
     unsigned long port;
@@ -578,13 +587,24 @@ hash_set_internal(struct session *sessions, unsigned long sz,
                     snprintf(session->next->user, strlen(user) + 1, "%s", user);
                 }
             }
+            if (db != session->next->db) {
+                if (db) {
+                    if (session->next->db) {
+                        free(session->next->db);
+                        session->next->db = NULL;
+                    }
+                    session->next->db = malloc(strlen(db) + 1);
+                    snprintf(session->next->db, strlen(db) + 1, "%s", db);
+                }
+            }
+
             if (status)
                 session->next->status = status;
             
             return 0;
         }
     }
-    
+    /* not in hash, new */
     session->next = malloc(sizeof(struct session));
     memset(session->next, 0, sizeof(struct session));
     if (!session->next)
@@ -618,6 +638,13 @@ hash_set_internal(struct session *sessions, unsigned long sz,
         }
         session->next->user = malloc(strlen(user) + 1);
         snprintf(session->next->user, strlen(user) + 1, "%s", user);
+    }
+    if (db) {
+        if (session->next->db) {
+            free(session->next->db);
+        }
+        session->next->db = malloc(strlen(db) + 1);
+        snprintf(session->next->db, strlen(db) + 1, "%s", db);
     }
 
     if (status)
@@ -653,7 +680,8 @@ hash_load_check(struct hash *hash) {
                 
                 hash_set_internal(new_sessions, nsz, session->laddr,
                         session->raddr, session->lport, session->rport,
-                        session->tv, session->sql, session->cmd, session->user, session->sqlSaveLen ,session->status);
+                        session->tv, session->sql, session->cmd, session->user, session->db,
+                        session->sqlSaveLen ,session->status);
                         
             }
         }

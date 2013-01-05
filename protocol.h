@@ -48,7 +48,7 @@ enum ProtoStage {
     RESULT_STAGE = '3'
 };
 
-int is_sql (char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen);
+int is_sql (char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen);
 
 int parse_sql(char *payload, uint32 payload_len, char **sql, uint32 sqlSaveLen);
 

@@ -124,13 +124,15 @@ start_packet(MysqlPcap *mp) {
         mp->addCache(mp, "Listen Device is %s, Filter is %s\n", mp->netDev, mp->filter);
 
         if (mp->isShowSrcIp == 1) {
-            mp->addCache(mp, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n",
-                "timestamp", "source ip ",    "latency(us)", "rows", "user", "sql");
-            mp->addCache(mp, "%-20.20s%-17.17s%-16.16s%-10.10s%-10.10s%s\n",
-                "---------", "---------------", "-----------", "----", "----", "---");
+            mp->addCache(mp, "%-20.20s%-17.17s%-12.12s%-8.8s%-8.8s%-10.10s%s\n",
+                "timestamp", "source ip ",    "latency(us)", "rows", "user", "db", "sql");
+            mp->addCache(mp, "%-20.20s%-17.17s%-12.12s%-8.8s%-8.8s%-10.10s%s\n",
+                "---------", "---------------", "----------", "----", "----", "----", "---");
         } else {
-            mp->addCache(mp, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "timestamp", "latency(us)", "rows", "user", "sql");
-            mp->addCache(mp, "%-20.20s%-16.16s%-10.10s%-10.10s%s\n", "---------", "-----------", "----", "----", "---");
+            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-8.8s%-10.10s%s\n", 
+                "timestamp", "latency(us)", "rows", "user", "db", "sql");
+            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-8.8s%-10.10s%s\n", 
+                "---------", "----------", "----", "----", "----", "---");
         }
 
         mp->flushCache(mp, 1);
@@ -177,7 +179,9 @@ start_packet(MysqlPcap *mp) {
             mp->fakeNow = mp->lastReloadAddressTime;
 
             dump(L_DEBUG, " delete idle connection ");
+            hash_print(mp->hash);
             hash_delete_idle(mp->hash, mp->fakeNow, 8 * RELOAD_ADDRESS_INTERVAL);
+            hash_print(mp->hash);
 
             struct pcap_stat ps;
             pcap_stats(mp->pd, &ps);
@@ -367,7 +371,7 @@ int
 inbound(MysqlPcap *mp, char* data, uint32 datalen,
     uint16 dport, uint16 sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp) {
 
-    char *sql = NULL, *user = NULL;
+    char *sql = NULL, *user = NULL, *db = NULL;
     int cmd = ERR;
     int ret = ERR;
     int status = ERR;
@@ -393,7 +397,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     if ((status == AfterAuthEofPacket)) {
         /* here is scramble232 password */
         hash_set(mp->hash, dst, src,
-            lport, rport, tv, NULL, 0, NULL, 0, AfterAuthPwPacket);
+            lport, rport, tv, NULL, 0, NULL, NULL, 0, AfterAuthPwPacket);
         return OK;
     }
 
@@ -441,8 +445,8 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         }
     }
 
-    if (likely((cmd = is_sql(data, datalen, &user, sqlSaveLen)) >= 0)) {
-        ASSERT(user == NULL);
+    if (likely((cmd = is_sql(data, datalen, &user, &db, sqlSaveLen)) >= 0)) {
+        ASSERT((user == NULL) && (db == NULL));
 
         /* guess sql is compress protocol ?*/
         if (sqlSaveLen == 0) {
@@ -451,7 +455,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     if (datalen != 5) {
                         dump(L_OK, " compress sql ");
                         hash_set(mp->hash, dst, src,
-                            lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
+                            lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
                         return ERR;
                     }
                 }
@@ -459,13 +463,13 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     && (datalen > 7 ) && ( data[7] == '\0')) {
                     dump(L_OK, " compress sql ");
                     hash_set(mp->hash, dst, src,
-                        lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
+                        lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
                     return ERR;
                 }
             } else {
                 dump(L_OK, " compress sql ");
                 hash_set(mp->hash, dst, src,
-                    lport, rport, tv, "compress sql", 0, NULL, ret, AfterAuthCompressPacket);
+                    lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
                 return ERR;
             }
         }
@@ -474,7 +478,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         if (unlikely(cmd == COM_QUIT)) {
             dump(L_DEBUG, "quit packet %u so remove entry", datalen);
             hash_get_rem(mp->hash, dst, src,
-                lport, rport, NULL, NULL, NULL);
+                lport, rport);
         } else if (unlikely(cmd == COM_STMT_PREPARE)) {
 
             ret = parse_sql(data, datalen, &sql, sqlSaveLen);
@@ -484,7 +488,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             ASSERT(strlen(sql) > 0);
             dump(L_DEBUG, "prepare packet %s %d", sql, cmd);
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, sql, cmd, NULL, ret, AfterPreparePacket);
+                lport, rport, tv, sql, cmd, NULL, NULL, ret, AfterPreparePacket);
         } else if (unlikely(cmd == COM_STMT_CLOSE)) {
 
             /* #TODO, only remove stmt_id, not session */
@@ -538,31 +542,42 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         } else if (unlikely(cmd == COM_SLEEP)) {
             dump(L_DEBUG, "sleep ");
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, "sleep", cmd, NULL, 0, AfterSqlPacket);
+                lport, rport, tv, "sleep", cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_PING)) {
             dump(L_DEBUG, "ping ");
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, "ping", cmd, NULL, 0, AfterSqlPacket);
+                lport, rport, tv, "ping", cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_BINLOG_DUMP)) {
             dump(L_DEBUG, "binlog dump");
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, "binlog dump", cmd, NULL, 0, AfterSqlPacket);
+                lport, rport, tv, "binlog dump", cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_STATISTICS)) {
             dump(L_DEBUG, "statistics");
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, "statistics", cmd, NULL, 0, AfterSqlPacket);
+                lport, rport, tv, "statistics", cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_SET_OPTION)) {
             dump(L_DEBUG, "set option");
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, "set option", cmd, NULL, 0, AfterSqlPacket);
+                lport, rport, tv, "set option", cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_SHUTDOWN)) {
             dump(L_DEBUG, "shutdown");
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, "shutdown", cmd, NULL, 0, AfterSqlPacket);
+                lport, rport, tv, "shutdown", cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_INIT_DB)) {
-            dump(L_DEBUG, "init_db");
+            /*  db not string, so tail postion need zero
+             *  overstep array?
+             *  no for snaplen is too big
+             *  TODO
+             *  use db possible failure, reply ok packet need parse
+            */
+            data[datalen] = '\0';
+            db = data + 5; // packet header + COM_INITDB
+            ASSERT(db);
+            char s[30];
+            snprintf(s, sizeof(s), "use %s", db);
+            dump(L_DEBUG, s);
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, "init_db", cmd, NULL, 0, AfterSqlPacket);
+                lport, rport, tv, s, cmd, NULL, db, 0, AfterSqlPacket);
         } else if (likely(cmd > 0)) {
             //ASSERT((cmd == COM_QUERY) || (cmd == COM_INIT_DB));
             /*
@@ -591,7 +606,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     status = AfterSqlPacket;
                 }
                 hash_set(mp->hash, dst, src,
-                    lport, rport, tv, sql, cmd, NULL, ret, status);
+                    lport, rport, tv, sql, cmd, NULL, NULL, ret, status);
             }
         } else {
             dump(L_ERR, "why here %d %u %u %s", cmd, status, datalen, sql);
@@ -602,6 +617,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         return ERR;
     } else {
         ASSERT(user);
+        ASSERT(db);
         ASSERT((cmd == -2) || (cmd == -1));
         /* auth packet */
         if (cmd == -1) {
@@ -609,7 +625,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 if (NULL == listSearchKey(mp->focusUser, user)) {
                     dump(L_DEBUG, "user:%s is not in focus", user);
                     hash_set(mp->hash, dst, src,
-                        lport, rport, tv, NULL, cmd, user, 0, AfterFilterUserPacket);
+                        lport, rport, tv, NULL, cmd, user, db, 0, AfterFilterUserPacket);
                     return ERR;
                 }
             }
@@ -617,17 +633,16 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 if (listSearchKey(mp->filterUser, user)) {
                     dump(L_DEBUG, "user:%s is in filter", user);
                     hash_set(mp->hash, dst, src,
-                        lport, rport, tv, NULL, cmd, user, 0, AfterFilterUserPacket);
+                        lport, rport, tv, NULL, cmd, user, db, 0, AfterFilterUserPacket);
                     return ERR;
                 }
             }
-
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, NULL, cmd, user, 0, AfterAuthPacket);
+                lport, rport, tv, NULL, cmd, user, db, 0, AfterAuthPacket);
             dump(L_DEBUG, "auth packet %s", user);
         } else {
             hash_set(mp->hash, dst, src,
-                lport, rport, tv, NULL, cmd, user, 0, AfterAuthCompressPacket);
+                lport, rport, tv, NULL, cmd, user, db, 0, AfterAuthCompressPacket);
             dump(L_OK, "auth packet %s is compress, will filter", user);
         }
     }
@@ -638,7 +653,7 @@ int
 outbound(MysqlPcap *mp, char *data, uint32 datalen,
     uint16 dport, uint16 sport, uint32 dst, uint32 src, struct timeval tv, struct tcphdr *tcp, char *srcip) {
 
-    char *sql = NULL, *user = NULL;
+    char *sql = NULL, *user = NULL, *db = NULL;
     int cmd = ERR;
     int ret = ERR;
 
@@ -663,7 +678,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
 
     /* TODO other hash_set must clear lastNum lastData, lastDataSize */
     int status = hash_get(mp->hash, src, dst,
-        lport, rport, &tv2, &sql, &user, &value, &lastData,
+        lport, rport, &tv2, &sql, &user, &db, &value, &lastData,
         &lastDataSize, &lastNum, &ps, &tcp_seq, &cmd);
 
     if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
@@ -738,11 +753,11 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                mp->addCache(mp, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
-                    srcip, latency , num, user, sql, value);
+                mp->addCache(mp, "%-20.20s%-17.17s%-10lu%-8ld%-8.8s%-8.8s %s [%s]\n", tt,
+                    srcip, latency , num, user, db, sql, value);
             } else {
-                mp->addCache(mp, "%-20.20s%-16lu%-10ld%-10.10s %s [%s]\n", tt,
-                    latency, num, user, sql, value);
+                mp->addCache(mp, "%-20.20s%-10lu%-8ld%-8.8s%-8.8s %s [%s]\n", tt,
+                    latency, num, user, db, sql, value);
             }
         } else {
             // normal statement
@@ -750,16 +765,16 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                mp->addCache(mp, "%-20.20s%-17.17s%-16lu%-10ld%-10.10s %s\n", tt,
-                    srcip, latency, num, user, sql);
+                mp->addCache(mp, "%-20.20s%-17.17s%-10lu%-8ld%-8.8s%-8.8s %s\n", tt,
+                    srcip, latency, num, user, db, sql);
             } else {
-                mp->addCache(mp, "%-20.20s%-16lu%-10ld%-10.10s %s\n", tt,
-                    latency, num, user, sql);
+                mp->addCache(mp, "%-20.20s%-10lu%-8ld%-8.8s%-8.8s %s\n", tt,
+                    latency, num, user, db, sql);
             }
         }
         if (num >= -1) {
             hash_set(mp->hash, src, dst,
-                lport, rport, tv, sql, cmd, user, 0, AfterOkPacket);
+                lport, rport, tv, sql, cmd, user, db, 0, AfterOkPacket);
         }
     } else if (0 == status) {
             dump(L_DEBUG, "handshake packet or out packet but cant find session ");
@@ -774,15 +789,15 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         if (unlikely(state == ERR)) {
             dump(L_DEBUG, "auth error packet ");
             hash_get_rem(mp->hash, src, dst,
-                lport, rport, NULL, NULL, NULL);
+                lport, rport);
         } else if (state == -3) {
             dump(L_DEBUG, "secure auth eof packet ");
             hash_set(mp->hash, src, dst,
-                lport, rport, tv, NULL, cmd, NULL, 0, AfterAuthEofPacket);
+                lport, rport, tv, NULL, cmd, NULL, NULL, 0, AfterAuthEofPacket);
         } else {
             dump(L_DEBUG, "auth ok packet ");
             hash_set(mp->hash, src, dst,
-                lport, rport, tv, NULL, cmd, NULL, 0, AfterOkPacket);
+                lport, rport, tv, NULL, cmd, NULL, NULL, 0, AfterOkPacket);
         }
     } else if (AfterPreparePacket == status) {
         int stmt_id = ERR;

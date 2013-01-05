@@ -77,7 +77,7 @@ enum ProtoStage *lastPs;
     -3 bad data
 */
 int
-is_sql(char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen) {
+is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen) {
 
     if (sqlSaveLen > 0)
         return COM_QUERY;
@@ -101,6 +101,7 @@ is_sql(char *payload, uint32 payload_len, char **user, uint32 sqlSaveLen) {
                 }
             }
             *user = payload + 36;
+            *db = payload + 62;
             #define CLIENT_COMPRESS     32  /* Can use compression protocol */ 
             unsigned long client_flag = 0;
             /* only 41 protocol */
