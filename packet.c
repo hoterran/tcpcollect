@@ -124,15 +124,15 @@ start_packet(MysqlPcap *mp) {
         mp->addCache(mp, "Listen Device is %s, Filter is %s\n", mp->netDev, mp->filter);
 
         if (mp->isShowSrcIp == 1) {
-            mp->addCache(mp, "%-20.20s%-17.17s%-12.12s%-8.8s%-8.8s%-10.10s%s\n",
+            mp->addCache(mp, "%-20.20s%-17.17s%-12.12s%-8.8s%-10.10s%-12.12s%s\n",
                 "timestamp", "source ip ",    "latency(us)", "rows", "user", "db", "sql");
-            mp->addCache(mp, "%-20.20s%-17.17s%-12.12s%-8.8s%-8.8s%-10.10s%s\n",
-                "---------", "---------------", "----------", "----", "----", "----", "---");
+            mp->addCache(mp, "%-20.20s%-17.17s%-12.12s%-8.8s%-10.10s%-12.12s%s\n",
+                "--------------", "---------------", "----------", "----", "----", "--", "---");
         } else {
-            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-8.8s%-10.10s%s\n", 
+            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-10.10s%-12.12s%s\n", 
                 "timestamp", "latency(us)", "rows", "user", "db", "sql");
-            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-8.8s%-10.10s%s\n", 
-                "---------", "----------", "----", "----", "----", "---");
+            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-10.10s%-12.12s%s\n", 
+                "--------------", "----------", "----", "----", "--", "---");
         }
 
         mp->flushCache(mp, 1);
@@ -623,7 +623,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         return ERR;
     } else {
         ASSERT(user);
-        ASSERT(db);
+        //ASSERT(db); db possible NULL
         ASSERT((cmd == -2) || (cmd == -1));
         /* auth packet */
         if (cmd == -1) {
@@ -759,10 +759,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                mp->addCache(mp, "%-20.20s%-17.17s%-10lu%-8ld%-8.8s%-8.8s %s [%s]\n", tt,
+                mp->addCache(mp, "%-20.20s%-17.17s%-12lu%-8ld%-10.10s%-12.12s %s [%s]\n", tt,
                     srcip, latency , num, user, db, sql, value);
             } else {
-                mp->addCache(mp, "%-20.20s%-10lu%-8ld%-8.8s%-8.8s %s [%s]\n", tt,
+                mp->addCache(mp, "%-20.20s%-12lu%-8ld%-10.10s%-12.12s %s [%s]\n", tt,
                     latency, num, user, db, sql, value);
             }
         } else {
@@ -771,10 +771,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
 
             if (mp->isShowSrcIp == 1) {
-                mp->addCache(mp, "%-20.20s%-17.17s%-10lu%-8ld%-8.8s%-8.8s %s\n", tt,
+                mp->addCache(mp, "%-20.20s%-17.17s%-12lu%-8ld%-10.10s%-12.12s %s\n", tt,
                     srcip, latency, num, user, db, sql);
             } else {
-                mp->addCache(mp, "%-20.20s%-10lu%-8ld%-8.8s%-8.8s %s\n", tt,
+                mp->addCache(mp, "%-20.20s%-12lu%-8ld%-10.10s%-12.12s %s\n", tt,
                     latency, num, user, db, sql);
             }
         }
