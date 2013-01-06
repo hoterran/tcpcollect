@@ -738,8 +738,17 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
 
         if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)
             || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP) || (cmd == COM_SHUTDOWN)) {
-            //eof packet or error packet, skip it
+            // this cmd, will return eof packet or error packet
             num = 1;
+            // replicator eof 
+            if (cmd == COM_BINLOG_DUMP) {
+                uchar c = data[4];
+                if (c == 0xfe) {
+                    dump(L_DEBUG, "replicator eof port %hu", rport);
+                    hash_get_rem(mp->hash, src, dst, lport, rport);
+                    return OK;
+                }
+            }
         } else {
             //resultset packet
             num = parse_result(data, datalen, lastData, lastDataSize, lastNum, ps);
