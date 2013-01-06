@@ -160,7 +160,7 @@ start_packet(MysqlPcap *mp) {
             time_t t = time(NULL);
             if (t > mp->fakeNow) 
                 mp->fakeNow = t;
-            dump(L_ERR, "timeout2 ~~~~ %d %ld", ret, mp->fakeNow);
+            dump(L_DEBUG, "timeout2 ~~~~ %d %ld", ret, mp->fakeNow);
         }
 
         /* flush cache, actually is flush by user */
@@ -184,10 +184,10 @@ start_packet(MysqlPcap *mp) {
                 mp->fakeNow = mp->lastReloadAddressTime;
             }
 
+            hash_stat(mp->hash);
             dump(L_DEBUG, " delete idle connection ");
-            hash_print(mp->hash);
             hash_delete_idle(mp->hash, mp->fakeNow, 8 * RELOAD_ADDRESS_INTERVAL);
-            hash_print(mp->hash);
+            hash_stat(mp->hash);
 
             struct pcap_stat ps;
             pcap_stats(mp->pd, &ps);
@@ -401,6 +401,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     
     if (status == AfterFilterUserPacket) {
         if ((datalen == 5) && (data[4] == COM_QUIT)) {
+            dump(L_DEBUG, "filter user del");
             hash_get_rem(mp->hash, dst, src, lport, rport);
         }
         return ERR;

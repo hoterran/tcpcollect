@@ -127,6 +127,10 @@ void hash_print(struct hash* hash) {
     hash_loop(hash, funcp_print, NULL);
 }
 
+void hash_stat(struct hash* hash) {
+    dump(L_OK, "hash stat %u-%u", hash->sz, hash->count);
+}
+
 /* general hash iterator */
 static int hash_loop(struct hash *hash, funcp func, void *arg) {
     unsigned long i;

@@ -67,6 +67,7 @@ void hash_delete_idle(struct hash* hash, time_t now, int idle_time);
 
 void hash_print(struct hash* hash);
 
+void hash_stat(struct hash* hash);
 
 int
 hash_set_stmt (struct hash *hash, 
