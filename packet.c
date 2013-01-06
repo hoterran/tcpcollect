@@ -396,7 +396,13 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen, &tcp_seq);
 
-    if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
+    if (status == AfterAuthCompressPacket)
+        return ERR;
+    
+    if (status == AfterFilterUserPacket) {
+        if ((datalen == 5) && (data[4] == COM_QUIT)) {
+            hash_get_rem(mp->hash, dst, src, lport, rport);
+        }
         return ERR;
     }
 
