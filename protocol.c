@@ -105,14 +105,19 @@ is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSave
             size_t l = strlen(payload + 36) + 1;
             ASSERT(l > 0);
             // salt and salt len
+            
             int pwLen = lcb_length(payload + 36 + l) + net_field_length(payload + 36 + l);   
 
             if (payload_len == 36 + l + pwLen) {
                 ASSERT(*db == NULL);
             } else {
                 ASSERT(36 + l + pwLen < payload_len);
-                *db = payload + 36 + l + pwLen; 
-
+                // db just \0
+                if (36 + l + pwLen + 1 == payload_len) {
+                    *db = NULL; 
+                } else {
+                    *db = payload + 36 + l + pwLen; 
+                }
             }
 
             #define CLIENT_COMPRESS     32  /* Can use compression protocol */ 
