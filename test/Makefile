@@ -10,4 +10,5 @@ all:
 	gcc -g -o p8 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p8.c
 	gcc -g -o p9 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p9_long_field.c
 	gcc -g -o p10 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p10_use_db.c
+	gcc -g -o p11 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p11_sqlcollect_size_too_big.c
 

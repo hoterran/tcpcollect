@@ -422,7 +422,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 dump(L_ERR, "sql first chao order sql1 %u %u", datalen, ntohl(tcp->seq));
                 return ERR;
             }
-            *tcp_seq =ntohl(tcp->seq) + datalen;
+            *tcp_seq = ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "first receive sql1");
         } else {
             if (*tcp_seq == ntohl(tcp->seq)) {
@@ -449,10 +449,18 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         } else if (*tcp_seq == ntohl(tcp->seq)) {
             *tcp_seq = ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "sql continues %u", datalen);
-        } else {
-            if (*tcp_seq > ntohl(tcp->seq)) {
+        } else if (*tcp_seq > ntohl(tcp->seq)) {
                 dump(L_DEBUG, "sql repeat %u %u %u", datalen, tcp_seq, ntohl(tcp->seq));
                 return ERR;
+        } else {
+            /* expect 1, but receive 99, means what?
+             1. recive packet is chao, some packet come earlier, dont deal
+             2. tcp_seq overflow, possible still repeat packet
+            */
+            if (*tcp_seq < CAP_LEN) {
+                if (*tcp_seq == ntohl(tcp->seq) + datalen) {
+                    dump(L_DEBUG, "sql repeat packet overflow");
+                }
             }
             return ERR;
         }
@@ -718,15 +726,26 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
             if (*tcp_seq == ntohl(tcp->seq)) {
                 *tcp_seq = ntohl(tcp->seq) + datalen;
             } else {
+                /* expect 100, but receive 99, means repeat packet or old chao packet */
                 if (*tcp_seq > ntohl(tcp->seq)) {
                     dump(L_DEBUG, "bond repeat packet");
                     return ERR;
+                } else {
+                    /* expect 1, but receive 99, means what?
+                     1. recive packet is chao, some packet come earlier, dont deal
+                     2. tcp_seq overflow, possible still repeat packet
+                    */
+                    if (*tcp_seq < CAP_LEN) {
+                        if (*tcp_seq == ntohl(tcp->seq) + datalen) {
+                            dump(L_DEBUG, "bond repeat packet overflow");
+                            return ERR;
+                        }
+                    }
                 }
 
                 struct pcap_stat ps;
                 pcap_stats(mp->pd, &ps);
                 dump(L_ERR, " error packet expect %u but %u drops:%u", *tcp_seq , ntohl(tcp->seq), ps.ps_drop);
-
                 return ERR;
             }
         }
