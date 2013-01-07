@@ -3365,7 +3365,7 @@ pcap_read_linux_mmap(pcap_t *handle, int max_packets, pcap_handler callback,
 		} while (ret < 0);
 	}
     if (ret == 0) {
-        return -10; 
+        return -10;
     }
 
 	/* non-positive values of max_packets are used to require all 

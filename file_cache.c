@@ -42,7 +42,7 @@ int fileCacheInit(MysqlPcap *mp) {
     return OK;
 }
 
-void fileCacheAdd(MysqlPcap *mp, const char *fmt, ...) {
+int fileCacheAdd(MysqlPcap *mp, const char *fmt, ...) {
     ASSERT(mp);
     va_list ap;
     va_start(ap, fmt);
@@ -51,18 +51,21 @@ void fileCacheAdd(MysqlPcap *mp, const char *fmt, ...) {
 
     FileCache *fc = mp->config;
     fprintf(fc->file, "%s", G_one_cache);
+
+    return OK;
 }
 
-void fileCacheFlush(MysqlPcap* mp, int force) {
+int fileCacheFlush(MysqlPcap* mp, int force) {
     ASSERT(mp && mp->config);
     FileCache *fc = mp->config;
     ASSERT(mp->fakeNow >= mp->cacheFlushTime);
 
     /* not force flush and not on time would return */
     if ((force == 0) && (mp->fakeNow - mp->cacheFlushTime <= FLUSH_INTERVAL)) {
-        return;
+        return OK;
     }
     fflush(fc->file);
     mp->cacheFlushTime = mp->fakeNow;
+    return OK;
 }
 

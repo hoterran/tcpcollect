@@ -5,8 +5,8 @@ struct _MysqlPcap;
 typedef struct _MysqlPcap MysqlPcap;
 
 typedef int (*initFp) (MysqlPcap *);
-typedef void (*addFp) (MysqlPcap *, const char *fmt, ...);
-typedef void (*flushFp) (MysqlPcap *, int force);
+typedef int (*addFp) (MysqlPcap *, const char *fmt, ...);
+typedef int (*flushFp) (MysqlPcap *, int force);
 
 #include <pcap.h>
 #include <sys/time.h>

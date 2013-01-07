@@ -24,9 +24,9 @@
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define PCAP_BUFFER_SIZE 1024 * 1024 * 32
 /* prepare statement param value length */
 #define VALUE_SIZE 1024
-
 /* mysql wait_timeout default value */
 #define CONNECT_IDLE_TIME 8 * 3600
 /* each interval, will reload current ip address */
@@ -94,8 +94,8 @@ start_packet(MysqlPcap *mp) {
     ret = pcap_set_timeout(mp->pd, PCAP_POLL_TIMEOUT);
     ASSERT(ret == 0);
 
-    /* set pcap buffer size is 32m, decline drop percentage */
-    ret = pcap_set_buffer_size(mp->pd, 1024 * 1024 * 32);
+    /* set pcap buffer size, decline drop percentage */
+    ret = pcap_set_buffer_size(mp->pd, PCAP_BUFFER_SIZE);
     ASSERT(ret == 0);
 
     ret = pcap_activate(mp->pd);
@@ -129,9 +129,9 @@ start_packet(MysqlPcap *mp) {
             mp->addCache(mp, "%-20.20s%-17.17s%-12.12s%-8.8s%-10.10s%-12.12s%s\n",
                 "--------------", "---------------", "----------", "----", "----", "--", "---");
         } else {
-            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-10.10s%-12.12s%s\n", 
+            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-10.10s%-12.12s%s\n",
                 "timestamp", "latency(us)", "rows", "user", "db", "sql");
-            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-10.10s%-12.12s%s\n", 
+            mp->addCache(mp, "%-20.20s%-12.12s%-8.8s%-10.10s%-12.12s%s\n",
                 "--------------", "----------", "----", "----", "--", "---");
         }
 
@@ -149,16 +149,15 @@ start_packet(MysqlPcap *mp) {
             pcap_stats(mp->pd, &ps);
             dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop);
         }
-
         /*
-         * pcap_dispatch return 0 not timeout 
+         * pcap_dispatch return 0 not timeout
          * avert each return systemcall time, only poll timeout call it
          * each 3 seconds call time(NULL) in maximum
          * ret > 0, we use mp->fakeNow as now, max deviation is smaller than 3 seconds
         */
-        if (ret == -10) { 
+        if (ret == -10) {
             time_t t = time(NULL);
-            if (t > mp->fakeNow) 
+            if (t > mp->fakeNow)
                 mp->fakeNow = t;
             dump(L_DEBUG, "timeout2 ~~~~ %d %ld", ret, mp->fakeNow);
         }
@@ -193,7 +192,6 @@ start_packet(MysqlPcap *mp) {
             pcap_stats(mp->pd, &ps);
             dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop);
         }
-
         /* shrink session->sql && session->param mem */
         /*
         hash_shrink_mem(mp->hash, header->ts, 60);
@@ -207,16 +205,9 @@ start_packet(MysqlPcap *mp) {
 }
 
 void
-process_packet(u_char *user, const struct pcap_pkthdr *header,
-    const u_char *packet) {
+process_packet(u_char *user, const struct pcap_pkthdr *header, const u_char *packet) {
 
     MysqlPcap *mp = (MysqlPcap *) user;
-
-    /*
-    struct pcap_stat ps;
-    pcap_stats(mp->pd, &ps);
-    printf("recv:%u-drop:%u-ifdrop:%u\n", ps.ps_recv, ps.ps_drop, ps.ps_ifdrop);
-    */
 
     const struct sll_header *sll;
     const struct ether_header *ether_header;
@@ -398,7 +389,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
     if (status == AfterAuthCompressPacket)
         return ERR;
-    
+
     if (status == AfterFilterUserPacket) {
         if ((datalen == 5) && (data[4] == COM_QUIT)) {
             dump(L_DEBUG, "filter user del");
@@ -474,21 +465,21 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             if ((COM_QUIT <= cmd) && (cmd < COM_END)) {
                 if (cmd == COM_QUIT) {
                     if (datalen != 5) {
-                        dump(L_OK, " compress sql ");
+                        dump(L_OK, " compress sql1 ");
                         hash_set(mp->hash, dst, src,
                             lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
                         return ERR;
                     }
                 }
-                if ((cmd != COM_STMT_EXECUTE) && (status != AfterPreparePacket)
+                if (((cmd != COM_STMT_EXECUTE) && (cmd != COM_BINLOG_DUMP)) && (status != AfterPreparePacket)
                     && (datalen > 7 ) && ( data[7] == '\0')) {
-                    dump(L_OK, " compress sql ");
+                    dump(L_OK, " compress sql2 ");
                     hash_set(mp->hash, dst, src,
                         lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
                     return ERR;
                 }
             } else {
-                dump(L_OK, " compress sql ");
+                dump(L_OK, " compress sql3 ");
                 hash_set(mp->hash, dst, src,
                     lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
                 return ERR;
@@ -498,8 +489,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         /* COM_ packet */
         if (unlikely(cmd == COM_QUIT)) {
             dump(L_DEBUG, "quit packet %u so remove entry", datalen);
-            hash_get_rem(mp->hash, dst, src,
-                lport, rport);
+            hash_get_rem(mp->hash, dst, src, lport, rport);
         } else if (unlikely(cmd == COM_STMT_PREPARE)) {
 
             ret = parse_sql(data, datalen, &sql, sqlSaveLen);
@@ -766,7 +756,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
             || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP) || (cmd == COM_SHUTDOWN)) {
             // this cmd, will return eof packet or error packet
             num = 1;
-            // replicator eof 
+            // replicator eof
             if (cmd == COM_BINLOG_DUMP) {
                 uchar c = data[4];
                 if (c == 0xfe) {
@@ -821,16 +811,16 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
             dump(L_DEBUG, "handshake packet or out packet but cant find session ");
     } else if ((AfterAuthPacket == status) || (AfterAuthPwPacket == status)) {
         long state = parse_result(data, datalen, NULL, NULL, NULL, NULL);
+        // only auth ok, not sql ok
         if ((state != ERR) && (state != OK) && (state != -3)) {
-            dump(L_ERR, "chao, no auth packet %u %u %ld", datalen, ntohl(tcp->seq), state);
+            dump(L_ERR, "chao, no auth ok packet %u %u %ld", datalen, ntohl(tcp->seq), state);
             return ERR;
         }
         ASSERT((state == ERR) || (state == OK) || (state == -3));
 
         if (unlikely(state == ERR)) {
             dump(L_DEBUG, "auth error packet ");
-            hash_get_rem(mp->hash, src, dst,
-                lport, rport);
+            hash_get_rem(mp->hash, src, dst, lport, rport);
         } else if (state == -3) {
             dump(L_DEBUG, "secure auth eof packet ");
             hash_set(mp->hash, src, dst,
