@@ -14,6 +14,8 @@ int single_process(char *process_name);
 
 void sig_init(void);
 
+void select_sleep(unsigned int);
+
 #define OK      (0)
 #define ERR     (-1)
 #define PEND    (1)

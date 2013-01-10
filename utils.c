@@ -76,6 +76,25 @@ int single_process(char *process_name)
 void sig_pipe_handler(int sig) {
     return;
 }
+
+void 
+select_sleep(unsigned int second)
+{   
+    if (second <= 0)
+        return ;
+    struct timeval t_timeval;
+    t_timeval.tv_sec = second;
+    t_timeval.tv_usec = 0;
+    while(1)
+    {  
+        if ((t_timeval.tv_sec == 0)&&(t_timeval.tv_usec == 0))//for eintr
+        {   
+            break;
+        }   
+        select(0, NULL, NULL, NULL, &t_timeval);
+    }
+}
+
 void sig_init(void)
 {
     /*

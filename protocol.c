@@ -229,7 +229,7 @@ parse_result(char* payload, uint32 payload_len,
                 } else {
                     /* resultset */
                     ulong field_number = net_field_length(payload + 4);
-                    ASSERT(field_number < 200);
+                    ASSERT(field_number < 500);
                     ulong field_lcb_length = lcb_length(payload + 4);
                     return field_packet(payload + 4 + field_lcb_length, 
                         payload_len - 4 - field_lcb_length, field_number);
@@ -282,7 +282,7 @@ eof_packet(char* payload, uint32 payload_len) {
         }
     }
     /* eof packet span two packet */
-    dump(L_OK, "eof span two packet %u\n", payload_len);
+    dump(L_DEBUG, "eof span two packet %u\n", payload_len);
     ASSERT(*lastData == NULL);
     *lastData = malloc(payload_len + 1);
     memcpy(*lastData, payload, payload_len);

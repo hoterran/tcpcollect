@@ -11,6 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
 
 #include "utils.h"
 #include "log.h"
@@ -175,8 +176,15 @@ start_packet(MysqlPcap *mp) {
             /* if specify address, skip reload address */
             if (NULL == mp->address) {
                 dump(L_OK, " reload address ");
-                free_addresses(mp->al);
-                mp->al = get_addresses();
+                if (mp->new_al) {
+                    pthread_mutex_lock(&mp->aux_mutex);
+                    void *p = mp->al;
+                    mp->al = mp->new_al;
+                    mp->new_al = p;
+                    pthread_mutex_unlock(&mp->aux_mutex);
+                } else {
+                    dump(L_ERR, "why new_al not exists"); 
+                }
             }
             mp->lastReloadAddressTime = time(NULL);
             if (mp->lastReloadAddressTime > mp->fakeNow) {
@@ -409,8 +417,8 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         /* must 0x 0x 00 00 03 */
         /* omit chaos packet */
         if (sqlSaveLen == 0) {
-            if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] < COM_QUIT)) {
-                dump(L_ERR, "sql first chao order sql1 %u %u", datalen, ntohl(tcp->seq));
+            if ((data[3] != '\0') || (data[4] >= COM_END) || (data[4] < COM_QUIT)) {
+                dump(L_ERR, "sql first chao order sql1 %u %u %u", *tcp_seq, datalen, ntohl(tcp->seq));
                 return ERR;
             }
             *tcp_seq = ntohl(tcp->seq) + datalen;
@@ -627,6 +635,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         /* too short packet, possible test */
         return ERR;
     } else {
+        if (data[3] != 1) {
+            dump(L_ERR, "no true auth %u", datalen);
+            return ERR;
+        }
         ASSERT(user);
         //ASSERT(db); db possible NULL
         ASSERT((cmd == -2) || (cmd == -1));
@@ -733,9 +745,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                     }
                 }
 
-                struct pcap_stat ps;
-                pcap_stats(mp->pd, &ps);
-                dump(L_ERR, " error packet expect %u but %u drops:%u", *tcp_seq , ntohl(tcp->seq), ps.ps_drop);
+                dump(L_ERR, " error packet expect %u but %u ", *tcp_seq , ntohl(tcp->seq));
                 return ERR;
             }
         }

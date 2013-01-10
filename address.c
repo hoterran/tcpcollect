@@ -4,9 +4,11 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 #include "address.h"
 #include "log.h"
+#include "utils.h"
 
 struct address_list {
     struct in_addr in_addr;
@@ -150,7 +152,6 @@ free_addresses(AddressList *al) {
     }
     
     return 0;
-    
 }
 
 int

@@ -19,7 +19,7 @@ libpcap-pfring: dummy
 libpcap: dummy
 	@cd libpcap && ./configure && make
 
-mysqlpcap:LOADLIBES += libpcap/libpcap.a
+mysqlpcap:LOADLIBES += libpcap/libpcap.a -lpthread
 mysqlpcap:CFLAGS += -Ilibpcap -DDEBUG
 mysqlpcap: mysqlpcap.c hash.o log.o packet.o protocol.o address.o utils.o adlist.o user.o file_cache.o
 

@@ -5,6 +5,7 @@
 #include <pcap.h>
 #include <time.h>
 #include <libgen.h>
+#include <pthread.h>
 
 #include "utils.h"
 #include "log.h"
@@ -16,6 +17,23 @@
 #include "adlist.h"
 #include "user.h"
 #include "file_cache.h"
+
+/* two primer */
+#define AUX_THREAD_SLEEP_TIME 33 * 61
+ 
+void *aux_thread(void *arg) {
+    MysqlPcap *mp = arg;
+    while(1) {
+        pthread_mutex_lock(&mp->aux_mutex);
+        if (mp->new_al) {
+            free_addresses(mp->new_al);
+        }
+        mp->new_al = get_addresses();
+        pthread_mutex_unlock(&mp->aux_mutex);
+        select_sleep(AUX_THREAD_SLEEP_TIME);
+        dump(L_WARN, "thread reload address");
+    }
+}
 
 int init(MysqlPcap *mp) {
     ASSERT(mp);
@@ -36,7 +54,9 @@ int init(MysqlPcap *mp) {
         dump(L_WARN, "address %s", mp->address);
         mp->al = parse_addresses(mp->address);
     } else {
+        pthread_mutex_init(&mp->aux_mutex, NULL);
         mp->al = get_addresses();
+        pthread_create(&mp->aux_thread_id, NULL, aux_thread, mp); 
     }
     mp->lastReloadAddressTime = time(NULL);
     mp->fakeNow = mp->lastReloadAddressTime;

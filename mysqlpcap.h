@@ -22,9 +22,14 @@ struct _MysqlPcap {
     bpf_u_int32 netmask;
     bpf_u_int32 localnet;
     char        keyWord[256];
-    void        *al;
     void        *hash;
-    char        *address;
+
+    pthread_mutex_t aux_mutex;
+    pthread_t       aux_thread_id;
+    char        *address;           /* user input */
+    void        *al;                /* address list */
+    void        *new_al;            /* new list, lock then switch*/
+
     int         isShowSrcIp;
     void        *focusUser;
     void        *filterUser;
