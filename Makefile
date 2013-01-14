@@ -1,4 +1,4 @@
-CC=gcc
+CC=gcc -O2
 CFLAGS= -g -Wall 
 INSTALL=/usr/bin/install
 INSTALLDIR=/usr/local

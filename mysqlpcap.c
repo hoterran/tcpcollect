@@ -35,7 +35,8 @@ void *aux_thread(void *arg) {
     }
 }
 
-int init(MysqlPcap *mp) {
+int init(MysqlPcap *mp) 
+{
     ASSERT(mp);
     /* file_cache */
     mp->initCache = fileCacheInit;
@@ -64,10 +65,11 @@ int init(MysqlPcap *mp) {
     return OK;
 }
 
-int main (int argc, char **argv) {
-
+int main (int argc, char **argv) 
+{
+    int ret;
     char *s = strdup(argv[0]);
-    chdir(dirname(s));
+    ret = chdir(dirname(s));
     free(s);
 
     log_init("mysqlpcap", NULL, ".log", L_OK);

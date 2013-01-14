@@ -169,7 +169,8 @@ start_packet(MysqlPcap *mp) {
          * each INTERVAL do below
          * 1. reload address
          * 2. delete idle connection, interval is mysql wait timeout
-         * 3. print drop percentage
+         * 3. print hash stat
+         * 4. print drop percentage
         */
         ASSERT(mp->lastReloadAddressTime <= mp->fakeNow);
         if (mp->fakeNow - mp->lastReloadAddressTime > RELOAD_ADDRESS_INTERVAL) {
@@ -183,7 +184,7 @@ start_packet(MysqlPcap *mp) {
                     mp->new_al = p;
                     pthread_mutex_unlock(&mp->aux_mutex);
                 } else {
-                    dump(L_ERR, "why new_al not exists"); 
+                    dump(L_ERR, "why new_al not exists");
                 }
             }
             mp->lastReloadAddressTime = time(NULL);
@@ -417,7 +418,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         /* must 0x 0x 00 00 03 */
         /* omit chaos packet */
         if (sqlSaveLen == 0) {
-            if ((data[3] != '\0') || (data[4] >= COM_END) || (data[4] < COM_QUIT)) {
+            if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] < COM_QUIT)) {
                 dump(L_ERR, "sql first chao order sql1 %u %u %u", *tcp_seq, datalen, ntohl(tcp->seq));
                 return ERR;
             }
@@ -704,10 +705,22 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         lport, rport, &tv2, &sql, &user, &db, &value, &lastData,
         &lastDataSize, &lastNum, &ps, &tcp_seq, &cmd);
 
-    if ((status == AfterAuthCompressPacket) || (status == AfterFilterUserPacket)) {
+    if (status == AfterAuthCompressPacket)
+        return ERR;
+
+    if (status == AfterFilterUserPacket) {
+        /* filter user not save cmd, so we cant use USER field conclude
+         * use replicator as filter?, all replicator use this account?
+         * TODO
+        */
+        uchar c = data[4];
+        if (c == 0xfe) {
+            dump(L_DEBUG, "replicator eof port %hu", rport);
+            hash_get_rem(mp->hash, src, dst, lport, rport);
+            return OK;
+        }
         return ERR;
     }
-
     if (status > 0) {
         if (*tcp_seq == 0) {
             if (likely((AfterSqlPacket == status) || (AfterOkPacket == status))) {
@@ -745,7 +758,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                     }
                 }
 
-                dump(L_ERR, " error packet expect %u but %u ", *tcp_seq , ntohl(tcp->seq));
+                dump(L_DEBUG, " error packet expect %u but %u ", *tcp_seq , ntohl(tcp->seq));
                 return ERR;
             }
         }
@@ -820,6 +833,16 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     } else if (0 == status) {
             dump(L_DEBUG, "handshake packet or out packet but cant find session ");
     } else if ((AfterAuthPacket == status) || (AfterAuthPwPacket == status)) {
+        /* must auth ok or auth err, skip chao packet */
+        if (datalen < 4) {
+            dump(L_ERR, "chao, no auth ok packet %u %u, too short", datalen, ntohl(tcp->seq));
+            return ERR;
+        }
+        uchar c = data[4];
+        if (!((c == 0) || (c == 0xfe) || (c == 0xff))) {
+            dump(L_ERR, "chao, no auth ok packet %u %u %d", datalen, ntohl(tcp->seq), c);
+            return ERR;
+        }
         long state = parse_result(data, datalen, NULL, NULL, NULL, NULL);
         // only auth ok, not sql ok
         if ((state != ERR) && (state != OK) && (state != -3)) {
