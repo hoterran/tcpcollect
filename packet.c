@@ -502,13 +502,24 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         } else if (unlikely(cmd == COM_STMT_PREPARE)) {
 
             ret = parse_sql(data, datalen, &sql, sqlSaveLen);
-            /* TODO prepare sql is possible too long */
-            ASSERT(ret == 0);
+            ASSERT(ret >= 0);
+            if (ret > 0) {
+                dump(L_DEBUG, "prepare sql is too long big than a packet");
+            }
+
             ASSERT(sql);
-            ASSERT(strlen(sql) > 0);
-            dump(L_DEBUG, "prepare packet %s %d", sql, cmd);
-            hash_set(mp->hash, dst, src,
-                lport, rport, tv, sql, cmd, NULL, NULL, ret, AfterPreparePacket);
+            dump(L_DEBUG, "prepare sql packet [%s] %d %d %d", sql, cmd, ret, sqlSaveLen);
+
+            if (sqlSaveLen > 0) {
+                hash_set_sql_len(mp->hash, dst, src,
+                    lport, rport, ret, AfterSqlPacket);
+            } else {
+                if (ret == 0) {
+                    status = AfterPreparePacket;
+                }
+                hash_set(mp->hash, dst, src,
+                    lport, rport, tv, sql, cmd, NULL, NULL, ret, status);
+            }
         } else if (unlikely(cmd == COM_STMT_CLOSE)) {
 
             /* #TODO, only remove stmt_id, not session */

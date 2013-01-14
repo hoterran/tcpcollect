@@ -210,7 +210,6 @@ parse_result(char* payload, uint32 payload_len,
         newData = NULL;
 
         return ret;
-
     } else {
         /*header*/
         if (payload_len > 4) {
