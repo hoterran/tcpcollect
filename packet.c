@@ -867,14 +867,18 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         int stmt_id = ERR;
         int param_count = ERR;
 
-        /* only handle first packet, skip field packet and next */
+        /* only handle first packet, skip field packet and next 
+         * bond repeat packet and big resultset prepare ok packet will go here
+         * so how to ignore it's?
+        */
         ret = parse_prepare_ok(data, datalen, &stmt_id, &param_count);
-        ASSERT(ret == 0);
-        ASSERT(stmt_id > 0);
-        ASSERT(param_count >= 0);
-        hash_set_param_count(mp->hash, src, dst,
-            lport, rport, stmt_id, param_count);
-        dump(L_DEBUG, "prepare ok packet %d %d", stmt_id, param_count);
+        if (ret == 0) {
+            ASSERT(stmt_id > 0);
+            ASSERT(param_count >= 0);
+            hash_set_param_count(mp->hash, src, dst,
+                lport, rport, stmt_id, param_count);
+            dump(L_DEBUG, "prepare ok packet %d %d", stmt_id, param_count);
+        }
     } else {
         dump(L_ERR, "why here %d %s %s", status, user, sql);
         ASSERT(NULL);

@@ -542,6 +542,10 @@ parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id,
     int packet_length = uint3korr(payload);
     int pos = 4;
 
+    if (payload[4] != '\0') {
+        dump(L_ERR, "tail packet, ignore it");
+        return -1;
+    }
     if (payload_len >= packet_length + 4) {
         pos++;          // skip ok
         *stmt_id = uint4korr(payload + pos);
