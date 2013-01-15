@@ -77,10 +77,9 @@ enum ProtoStage *lastPs;
     -3 bad data
 */
 int
-is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen) {
-
-    if (sqlSaveLen > 0)
-        return COM_QUERY;
+is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen) 
+{
+    ASSERT(sqlSaveLen == 0);
 
     if (payload_len < 5) {
         dump(L_ERR, "chao packets %u", payload_len);
@@ -522,11 +521,11 @@ store_param_time(char* buffer, char *param) {
     if (length == 12) {
         day = uint4korr(param+2); //skip length and neg
         second_part = uint4korr(param+9); 
-        snprintf(buffer + strlen(buffer), 20,"%d %d:%d:%d %d",
+        snprintf(buffer + strlen(buffer), 30,"%d %d:%d:%d %d,",
             day, *(param+6), *(param+7), *(param+8), second_part);
     } else if (length == 8) {
         day = uint4korr(param+2); //skip length and neg
-        snprintf(buffer + strlen(buffer), 15,"%d %d:%d:%d",
+        snprintf(buffer + strlen(buffer), 20,"%d %d:%d:%d,",
             day, *(param+6), *(param+7), *(param+8));
     } else {
         snprintf(buffer + strlen(buffer), 3,"%s,"," ");
@@ -595,7 +594,7 @@ parse_param(char *payload, uint32 payload_len, int param_count,
     char *param_type_pos = NULL;
     int null_count_length = (param_count+7) / 8;
     char* null_pos = NULL;
-    const uint signed_bit= 1 << 15;
+    const uint signed_bit = 1 << 15;
 
     if (payload_len >= packet_length + 4) {
         pos++;  /*skip COM_STMT_EXECUTE */
@@ -620,10 +619,11 @@ parse_param(char *payload, uint32 payload_len, int param_count,
             param_type = param_type + 2;
 
             // null 
-            if(null_pos[i/8] & (1<<i)) {
+            if(null_pos[i/8] & (1 << (i & 7))) {
                 store_param_null(param);
                 continue;
             }
+            
             // TODO use param_len 
             switch (type) {
                 case MYSQL_TYPE_NULL:
@@ -675,6 +675,7 @@ parse_param(char *payload, uint32 payload_len, int param_count,
                 
                 length = store_param_str(param, payload + pos);
                 pos = pos + length;
+                break;
             default:
                 break;
             }

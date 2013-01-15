@@ -17,8 +17,8 @@ MYSQL_TYPE_DATETIME     DATETIME field
 */
 
 #define DROP_SAMPLE_TABLE "DROP TABLE IF EXISTS test_table"
-#define CREATE_SAMPLE_TABLE "CREATE TABLE test_table(col1 INT, col2 VARCHAR(40), col3 SMALLINT, col4 TIMESTAMP, col5 datetime, col6 date, col7 time)"
-#define INSERT_SAMPLE "INSERT INTO test_table(col1,col2,col3, col4, col5, col6, col7) VALUES(?,?,?,?,?,?,?)"
+#define CREATE_SAMPLE_TABLE "CREATE TABLE test_table(col1 INT, col2 VARCHAR(40), col21 varchar(40), col22 varchar(40), col3 SMALLINT, col4 TIMESTAMP, col5 datetime, col6 date, col7 time)"
+#define INSERT_SAMPLE "INSERT INTO test_table(col1,col2,col3, col4, col5, col6, col7, col21, col22) VALUES(?,?,?,?,?,?,?, ?, ?)"
 #define INSERT_SAMPLE2 "INSERT INTO test_table(col1,col2,col3) VALUES(?,?,?)"
 
 int main (int argc, char *argv[]) {
@@ -35,7 +35,7 @@ int main (int argc, char *argv[]) {
     //mysql_real_connect(mysql, "10.1.170.196", "root", "root", "test", 3306, NULL, 0);
 
     MYSQL_STMT    *stmt;
-    MYSQL_BIND    bind[7];
+    MYSQL_BIND    bind[9];
     my_ulonglong  affected_rows;
     int           param_count;
     short         small_data;
@@ -79,19 +79,13 @@ int main (int argc, char *argv[]) {
     param_count= mysql_stmt_param_count(stmt);
     fprintf(stdout, " total parameters in INSERT: %d\n", param_count);
 
-    if (param_count != 7) /* validate parameter count */
-    {
-      fprintf(stderr, " invalid parameter count returned by MySQL\n");
-      exit(0);
-    }
-
     /* Bind the data for all 3 parameters */
 
     memset(bind, 0, sizeof(bind));
 
     /* INTEGER PARAM */
     /* This is a number type, so there is no need to specify buffer_length */
-    bind[0].buffer_type= MYSQL_TYPE_LONG;
+    bind[0].buffer_type= MYSQL_TYPE_LONGLONG;
     bind[0].buffer= (char *)&int_data;
     bind[0].is_null= 0;
 
@@ -125,6 +119,18 @@ int main (int argc, char *argv[]) {
     bind[6].buffer_type= MYSQL_TYPE_TIME;
     bind[6].buffer= (char*)&t;
     bind[6].is_null= 0;
+
+    bind[7].buffer_type= MYSQL_TYPE_STRING;
+    bind[7].buffer= (char *)str_data;
+    //bind[1].buffer_length= STRING_SIZE;  //最大长度, string not use this, 其它类型buffer_length 也没用
+    bind[7].is_null= 0;
+    bind[7].length= &str_length;        //实际大小, bind_
+
+    bind[8].buffer_type= MYSQL_TYPE_NULL;
+    bind[8].buffer= (char *)str_data;
+    //bind[1].buffer_length= STRING_SIZE;  //最大长度, string not use this, 其它类型buffer_length 也没用
+    bind[8].is_null= 0;
+    bind[8].length= &str_length;        //实际大小, bind_
 
     /* Bind the buffers */
     if (mysql_stmt_bind_param(stmt, bind))

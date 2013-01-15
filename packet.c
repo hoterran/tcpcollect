@@ -394,7 +394,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     rport = sport;
 
     status = hash_get_status(mp->hash, dst, src,
-        lport, rport, &sql, &sqlSaveLen, &tcp_seq);
+        lport, rport, &sql, &sqlSaveLen, &tcp_seq, &cmd);
 
     if (status == AfterAuthCompressPacket)
         return ERR;
@@ -466,7 +466,11 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         }
     }
 
-    if (likely((cmd = is_sql(data, datalen, &user, &db, sqlSaveLen)) >= 0)) {
+    /* if sqlSaveLen > 0, keep old cmd */
+    if (sqlSaveLen == 0)
+        cmd = is_sql(data, datalen, &user, &db, sqlSaveLen);
+
+    if (likely(cmd >= 0)) {
         ASSERT((user == NULL) && (db == NULL));
 
         /* guess sql is compress protocol ?*/
@@ -480,7 +484,8 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                         return ERR;
                     }
                 }
-                if (((cmd != COM_STMT_EXECUTE) && (cmd != COM_BINLOG_DUMP)) && (status != AfterPreparePacket)
+                if (((cmd != COM_STMT_CLOSE) && (cmd != COM_STMT_EXECUTE) 
+                    && (cmd != COM_BINLOG_DUMP)) && (status != AfterPreparePacket)
                     && (datalen > 7 ) && ( data[7] == '\0')) {
                     dump(L_OK, " compress sql2 ");
                     hash_set(mp->hash, dst, src,
@@ -500,7 +505,6 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "quit packet %u so remove entry", datalen);
             hash_get_rem(mp->hash, dst, src, lport, rport);
         } else if (unlikely(cmd == COM_STMT_PREPARE)) {
-
             ret = parse_sql(data, datalen, &sql, sqlSaveLen);
             ASSERT(ret >= 0);
             if (ret > 0) {
@@ -511,9 +515,11 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "prepare sql packet [%s] %d %d %d", sql, cmd, ret, sqlSaveLen);
 
             if (sqlSaveLen > 0) {
+                // 2.3.4...  last will update status
                 hash_set_sql_len(mp->hash, dst, src,
-                    lport, rport, ret, AfterSqlPacket);
+                    lport, rport, ret, AfterPreparePacket);
             } else {
+                // 1. or short sql
                 if (ret == 0) {
                     status = AfterPreparePacket;
                 }
@@ -627,7 +633,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "sql packet [%s] %d %d %d", sql, cmd, ret, sqlSaveLen);
 
             if (sqlSaveLen > 0) {
-                // 2.3.4
+                // 2.3.4 but last sql will set status
                 hash_set_sql_len(mp->hash, dst, src,
                     lport, rport, ret, AfterSqlPacket);
             } else {

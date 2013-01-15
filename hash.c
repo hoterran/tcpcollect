@@ -188,7 +188,7 @@ hash_del(struct hash *hash) {
 
 int hash_get_status(struct hash *hash,
      uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-     char **sql, uint32_t *sqlSaveLen, uint32_t **tcp_seq) {
+     char **sql, uint32_t *sqlSaveLen, uint32_t **tcp_seq, int *cmd) {
 
     struct session *session;
     unsigned long port;
@@ -204,6 +204,7 @@ int hash_get_status(struct hash *hash,
             *sql = session->next->sql;
             *sqlSaveLen = session->next->sqlSaveLen;
             *tcp_seq = &(session->next->tcp_seq);
+            *cmd = session->next->cmd;
 
             return session->next->status;
         }
