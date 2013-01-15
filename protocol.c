@@ -536,11 +536,13 @@ store_param_time(char* buffer, char *param) {
 int
 parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, 
     int *param_count) {
-    
+
+    /* 0x 0x 0x 01 00 */
+
     int packet_length = uint3korr(payload);
     int pos = 4;
 
-    if (payload[4] != '\0') {
+    if (!((packet_length > 0) && (payload[4] == '\0') && (payload[3] == '\1'))){
         dump(L_ERR, "tail packet, ignore it");
         return -1;
     }
