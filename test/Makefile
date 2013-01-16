@@ -12,4 +12,5 @@ all:
 	gcc -g -o p10 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p10_use_db.c
 	gcc -g -o p11 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p11_sqlcollect_size_too_big.c
 	gcc -g -o p12 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p12_perf_test.c
+	gcc -g -o p13 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p13_com_field_list.c
 

@@ -483,8 +483,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     }
                 }
                 if (((cmd != COM_STMT_CLOSE) && (cmd != COM_STMT_EXECUTE) 
-                    && (cmd != COM_BINLOG_DUMP)) && (status != AfterPreparePacket)
-                    && (datalen > 7 ) && ( data[7] == '\0')) {
+                    && (cmd != COM_BINLOG_DUMP)
+                    && (cmd != COM_FIELD_LIST)
+                    ) && (status != AfterPreparePacket)
+                    && (datalen > 7 ) && ( data[7] == '\0')) { //7 is compress length
                     dump(L_OK, " compress sql2 ");
                     hash_set(mp->hash, dst, src,
                         lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
@@ -598,6 +600,13 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, "shutdown");
             hash_set(mp->hash, dst, src,
                 lport, rport, tv, "shutdown", cmd, NULL, NULL, 0, AfterSqlPacket);
+        } else if (unlikely(cmd == COM_FIELD_LIST)) {
+            data[datalen] = '\0';
+            char s[30];
+            snprintf(s, sizeof(s), "list fields %s", data + 5);
+            dump(L_DEBUG, s);
+            hash_set(mp->hash, dst, src,
+                lport, rport, tv, s, cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_INIT_DB)) {
             /*  db not string, so tail postion need zero
              *  overstep array?
@@ -791,7 +800,9 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         ulong latency;
 
         if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)
-            || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP) || (cmd == COM_SHUTDOWN)) {
+            || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP) || (cmd == COM_SHUTDOWN)
+            || (cmd == COM_FIELD_LIST) 
+            ) {
             // this cmd, will return eof packet or error packet
             num = 1;
             // replicator eof
