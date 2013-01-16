@@ -396,7 +396,8 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen, &tcp_seq, &cmd);
 
-    if ((status == AfterFilterUserPacket) || (status == AfterAuthCompressPacket)) {
+    if ((status == AfterFilterUserPacket) || (status == AfterAuthCompressPacket) 
+        || (status == AfterLocalFilePacket)) {
         if ((datalen == 5) && (data[4] == COM_QUIT)) {
             dump(L_DEBUG, "filter user del");
             hash_get_rem(mp->hash, dst, src, lport, rport);
@@ -719,7 +720,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         lport, rport, &tv2, &sql, &user, &db, &value, &lastData,
         &lastDataSize, &lastNum, &ps, &tcp_seq, &cmd);
 
-    if (status == AfterAuthCompressPacket)
+    if ((status == AfterAuthCompressPacket) || (status == AfterLocalFilePacket))
         return ERR;
 
     if (status == AfterFilterUserPacket) {
@@ -806,13 +807,19 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
             //resultset packet
             num = parse_result(data, datalen, lastData, lastDataSize, lastNum, ps);
         }
-
+        /* if encounter local file dont handle  TODO */
+        if (num == -4) {
+            dump(L_ERR, "local file %s %d", sql, cmd);
+            hash_set(mp->hash, src, dst,
+                lport, rport, tv, NULL, cmd, NULL, NULL, 0, AfterLocalFilePacket);
+            return ERR;
+        }
         if (num == -3) {
             dump(L_ERR, "chao parse result %s %d", sql, cmd);
             return ERR;
         }
 
-        ASSERT((num == -2) || (num >= 0) || (num == -1));
+        ASSERT((num == -2) || (num >= 0) || (num == -1) || (num == -4));
         latency = (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec);
         // resultset
         if (value) {

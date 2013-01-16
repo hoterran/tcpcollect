@@ -31,7 +31,7 @@ enum SessionStatus {    AfterAuthPacket = 1,
                         AfterPrepareOkPacket,
                         AfterAuthCompressPacket,
                         AfterFilterUserPacket,
-
+                        AfterLocalFilePacket,
                         AfterAuthEofPacket,
                         AfterAuthPwPacket,
                         };

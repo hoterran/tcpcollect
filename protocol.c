@@ -163,6 +163,7 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
  *  -1 error
  *  -2 half resultset
  *  -3 secure compress packet
+ *  -4 load data local file
  *  if a complete resultset size larger than tcp packet will failure
 */
 
@@ -221,9 +222,12 @@ parse_result(char* payload, uint32 payload_len,
                 } else if (c == 0xff) {
                     return error_packet(payload, payload_len);
                 } else if (c == 0xfe) {
-                    /* some COM return is eof, but will never go here */
+                    /* some COM return is eof, but never go here */
                     dump(L_OK, "secure-auth packet"); 
                     return -3;
+                } else if (c == 0xfb) {
+                    dump(L_OK, "load data local file"); 
+                    return -4;
                 } else {
                     /* resultset */
                     ulong field_number = net_field_length(payload + 4);
