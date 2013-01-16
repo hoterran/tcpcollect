@@ -396,7 +396,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen, &tcp_seq, &cmd);
 
-    if ((status == AfterFilterUserPacket) || (status == AfterAuthCompressPacket) 
+    if ((status == AfterFilterUserPacket) || (status == AfterAuthCompressPacket)
         || (status == AfterLocalFilePacket)) {
         if ((datalen == 5) && (data[4] == COM_QUIT)) {
             dump(L_DEBUG, "filter user del");
@@ -463,7 +463,6 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             return ERR;
         }
     }
-
     /* if sqlSaveLen > 0, keep old cmd */
     if (sqlSaveLen == 0)
         cmd = is_sql(data, datalen, &user, &db, sqlSaveLen);
@@ -482,7 +481,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                         return ERR;
                     }
                 }
-                if (((cmd != COM_STMT_CLOSE) && (cmd != COM_STMT_EXECUTE) 
+                if (((cmd != COM_STMT_CLOSE) && (cmd != COM_STMT_EXECUTE)
                     && (cmd != COM_BINLOG_DUMP)
                     && (cmd != COM_FIELD_LIST)
                     ) && (status != AfterPreparePacket)
@@ -801,7 +800,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
 
         if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)
             || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP) || (cmd == COM_SHUTDOWN)
-            || (cmd == COM_FIELD_LIST) 
+            || (cmd == COM_FIELD_LIST)
             ) {
             // this cmd, will return eof packet or error packet
             num = 1;
@@ -899,7 +898,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         int stmt_id = ERR;
         int param_count = ERR;
 
-        /* only handle first packet, skip field packet and next 
+        /* only handle first packet, skip field packet and next
          * bond repeat packet and big resultset prepare ok packet will go here
          * so how to ignore it's?
         */
