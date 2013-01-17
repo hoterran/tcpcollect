@@ -370,7 +370,6 @@ eof_packet(char* payload, uint32 payload_len)
 ulong
 resultset_packet(char *payload, uint32 payload_len, ulong num) 
 {
-    ASSERT(payload_len <= CAP_LEN);
     int resultset_packet_length = 0;
     if (payload_len > 4) {
         resultset_packet_length = uint3korr(payload);
