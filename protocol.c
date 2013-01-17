@@ -40,7 +40,7 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
     uchar c = payload[3];
     if (status != 0) {
         if (c != 0x00) {
-            dump(L_ERR, "not first sql %u %c", payload_len, c);
+            dump(L_ERR, "not first sql %u %d", payload_len, c);
             return BAD;
         }
     }
@@ -160,7 +160,11 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen)
 
     /* for big sql */
     if (sqlSaveLen > 0) {
-        ASSERT(sqlSaveLen >= payload_len);
+        //ASSERT(sqlSaveLen >= payload_len);
+        if (sqlSaveLen < payload_len) {
+            dump(L_ERR, "chao sql %u %u", sqlSaveLen, payload_len);
+            return 0; 
+        }
         return sqlSaveLen - payload_len;
     }
 
@@ -237,6 +241,10 @@ parse_result(char* payload, uint32 payload_len,
         /*header*/
         int header_packet_length = 0;
         uchar c = 0;
+        if (payload_len < 5) {
+            dump(L_ERR, "chao result packet %u", payload_len);
+            return  -2;
+        }
         if (payload_len > 4) {
             header_packet_length = uint3korr(payload);
            
@@ -263,7 +271,7 @@ parse_result(char* payload, uint32 payload_len,
                 }
            }
         }
-        dump(L_ERR, "%u %d, %c", payload_len, header_packet_length, c);
+        dump(L_ERR, "%u %d, %d", payload_len, header_packet_length, c);
         return -2;
     }
 }

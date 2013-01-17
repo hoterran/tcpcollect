@@ -739,7 +739,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 /* this is packet is resultset first packet */
                 /* 0x 0x 00 01 */
                 if (data[2] != '\0') {
-                    dump(L_ERR, "first packet is chao order %u %u", datalen, ntohl(tcp->seq));
+                    dump(L_ERR, "first packet is chao order %u %u %d", datalen, ntohl(tcp->seq), data[2]);
                     return ERR;
                 }
                 if ((cmd < 0) || (!sql)) {
