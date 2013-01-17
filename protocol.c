@@ -9,54 +9,6 @@
 #include "protocol.h"
 #include "packet.h"
 
-#define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
-    ((uint16) ((uchar) (A)[1]) << 8))
-
-#define uint3korr(A)    (uint32) (((uint32) ((uchar) (A)[0])) +\
-    (((uint32) ((uchar) (A)[1])) << 8) +\
-    (((uint32) ((uchar) (A)[2])) << 16))
-
-#define uint4korr(A)    (uint32) (((uint32) ((uchar) (A)[0])) +\
-    (((uint32) ((uchar) (A)[1])) << 8) +\
-    (((uint32) ((uchar) (A)[2])) << 16) +\
-    (((uint32) ((uchar) (A)[3])) << 24))
-
-#define uint8korr(A)    ((ulonglong)(((uint32) ((uchar) (A)[0])) +\
-    (((uint32) ((uchar) (A)[1])) << 8) +\
-    (((uint32) ((uchar) (A)[2])) << 16) +\
-    (((uint32) ((uchar) (A)[3])) << 24)) +\
-    (((ulonglong) (((uint32) ((uchar) (A)[4])) +\
-    (((uint32) ((uchar) (A)[5])) << 8) +\
-    (((uint32) ((uchar) (A)[6])) << 16) +\
-    (((uint32) ((uchar) (A)[7])) << 24))) <<\
-    32))
-
-#define int2store(T,A)       do { uint def_temp= (uint) (A) ;\
-                                  *((uchar*) (T))=  (uchar)(def_temp); \
-                                   *((uchar*) (T)+1)=(uchar)((def_temp >> 8)); \
-                             } while(0)
-
-#define int4store(T,A)       do { *((char *)(T))=(char) ((A));\
-                                  *(((char *)(T))+1)=(char) (((A) >> 8));\
-                                  *(((char *)(T))+2)=(char) (((A) >> 16));\
-                                  *(((char *)(T))+3)=(char) (((A) >> 24)); } while(0)
-
-#define int8store(T,A) do { uint def_temp= (uint) (A), def_temp2= (uint) ((A) >> 32); \
-    int4store((T),def_temp); \
-    int4store((T+4),def_temp2); } while(0)
-
-#define memcpy_fixed(A,B,C) memcpy((A),(B),(C))
-
-#define float4store(V,M) memcpy_fixed((uchar*) V,(uchar*) (&M),sizeof(float))
-
-#define float8store(T,V) do { *(T)= ((uchar *) &V)[7];\
-                              *((T)+1)=(char) ((uchar *) &V)[6];\
-                              *((T)+2)=(char) ((uchar *) &V)[5];\
-                              *((T)+3)=(char) ((uchar *) &V)[4];\
-                              *((T)+4)=(char) ((uchar *) &V)[3];\
-                              *((T)+5)=(char) ((uchar *) &V)[2];\
-                              *((T)+6)=(char) ((uchar *) &V)[1];\
-                              *((T)+7)=(char) ((uchar *) &V)[0]; } while(0)
 
 ulong error_packet(char *payload, uint32 payload_len);
 ulong ok_packet(char *payload, uint32 payload_len);
@@ -283,11 +235,13 @@ parse_result(char* payload, uint32 payload_len,
         return ret;
     } else {
         /*header*/
+        int header_packet_length = 0;
+        uchar c = 0;
         if (payload_len > 4) {
-            int header_packet_length = uint3korr(payload);
+            header_packet_length = uint3korr(payload);
            
            if (header_packet_length + 4 <= payload_len) {
-                uchar c = payload[4];
+                c = payload[4];
                 if (c == 0) {
                     return ok_packet(payload, payload_len);
                 } else if (c == 0xff) {
@@ -309,8 +263,7 @@ parse_result(char* payload, uint32 payload_len,
                 }
            }
         }
-        dump(L_DEBUG, "%u", payload_len);
-        ASSERT(NULL);
+        dump(L_ERR, "%u %d, %c", payload_len, header_packet_length, c);
         return -2;
     }
 }
