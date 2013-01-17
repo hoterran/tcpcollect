@@ -318,8 +318,6 @@ parse_result(char* payload, uint32 payload_len,
 ulong
 field_packet(char* payload, uint32 payload_len, ulong field_number) 
 {
-    ASSERT(payload_len <= CAP_LEN);
-
     if (field_number == 0)
         return eof_packet(payload, payload_len);
     else {
