@@ -7,6 +7,7 @@
 #include "log.h"
 #include "mysqlpcap.h"
 #include "protocol.h"
+#include "packet.h"
 
 #define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
     ((uint16) ((uchar) (A)[1]) << 8))
@@ -70,6 +71,71 @@ uchar **lastData;
 size_t *lastDataSize;
 ulong *lastNum;
 enum ProtoStage *lastPs;
+
+/*
+ * sqlSaveLen == 0 call this function, verify it
+ * is compress return OK, not return ERR
+ * bad sql return BAD
+*/
+int isCompressPacket(char *payload, uint32 payload_len, int status)
+{
+    ASSERT(payload_len <= CAP_LEN);
+
+    if (payload_len < 5) {
+        dump(L_ERR, "what sql %u", payload_len);
+        return BAD;
+    }
+    uchar c = payload[3];
+    if (status != 0) {
+        if (c != 0x00) {
+            dump(L_ERR, "not first sql %u %c", payload_len, c);
+            return BAD;
+        }
+    }
+
+    uint32 packet_length = uint3korr(payload);
+
+    /*
+        normal
+            payload_len <= packet_length + 4
+        compress
+            payload_len <= packet_length + 7
+    */
+    if (payload_len > packet_length + 4) {
+        dump(L_ERR, "compress packet1 %u %u", payload_len, packet_length);
+        ASSERT(payload_len <= packet_length + 7);
+        return OK;
+    }
+
+    if (c == 0x01) {
+        /* auth */
+        return ERR;
+    }
+
+    int cmd = payload[4];
+    if ((COM_QUIT <= cmd) && (cmd < COM_END)) {
+        if (cmd == COM_QUIT) {
+            if (payload_len != 5) {
+                dump(L_OK, " compress sql2 ");
+                return OK;
+            }
+        }
+        /*
+        if (((cmd != COM_STMT_CLOSE) && (cmd != COM_STMT_EXECUTE)
+            && (cmd != COM_BINLOG_DUMP)
+            && (cmd != COM_FIELD_LIST)
+            ) && (status != AfterPreparePacket)
+            && (payload_len > 7 ) && ( data[7] == '\0')) { //7 is compress length
+            dump(L_OK, " compress sql3 ");
+            return OK;
+        }
+        */
+    } else {
+        dump(L_OK, " compress sql4 ");
+        return OK;
+    }
+    return ERR;
+}
 /*
     -1 auth
     -2 auth compress
@@ -79,6 +145,7 @@ enum ProtoStage *lastPs;
 int
 is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen) 
 {
+    ASSERT(payload_len <= CAP_LEN);
     ASSERT(sqlSaveLen == 0);
 
     if (payload_len < 5) {
@@ -135,7 +202,9 @@ is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSave
 }
 
 int
-parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
+parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) 
+{
+    ASSERT(payload_len <= CAP_LEN);
 
     /* for big sql */
     if (sqlSaveLen > 0) {
@@ -169,7 +238,9 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) {
 
 long
 parse_result(char* payload, uint32 payload_len,
-    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps) {
+    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps) 
+{
+    ASSERT(payload_len <= CAP_LEN);
 
     ulong ret;
     char *newData = NULL;
@@ -245,9 +316,9 @@ parse_result(char* payload, uint32 payload_len,
 }
 
 ulong
-field_packet(char* payload, uint32 payload_len, ulong field_number) {
-
-    ASSERT(payload_len < 16777216);
+field_packet(char* payload, uint32 payload_len, ulong field_number) 
+{
+    ASSERT(payload_len <= CAP_LEN);
 
     if (field_number == 0)
         return eof_packet(payload, payload_len);
@@ -274,7 +345,9 @@ field_packet(char* payload, uint32 payload_len, ulong field_number) {
 }
 
 ulong
-eof_packet(char* payload, uint32 payload_len) {
+eof_packet(char* payload, uint32 payload_len) 
+{
+    ASSERT(payload_len <= CAP_LEN);
 
     if (payload_len > 4) {
         uchar c = payload[4];
@@ -295,9 +368,9 @@ eof_packet(char* payload, uint32 payload_len) {
 }
 
 ulong
-resultset_packet(char *payload, uint32 payload_len, ulong num) {
-
-    ASSERT(payload_len < 16777216);
+resultset_packet(char *payload, uint32 payload_len, ulong num) 
+{
+    ASSERT(payload_len <= CAP_LEN);
     int resultset_packet_length = 0;
     if (payload_len > 4) {
         resultset_packet_length = uint3korr(payload);
@@ -340,11 +413,13 @@ resultset_packet(char *payload, uint32 payload_len, ulong num) {
 
 ulong 
 ok_packet(char *payload, uint32 payload_len) {
+    ASSERT(payload_len <= CAP_LEN);
     return net_field_length(payload + 5);
 }
 
 ulong 
 error_packet(char *payload, uint32 payload_len) {
+    ASSERT(payload_len <= CAP_LEN);
     return ERR;
 }
 
@@ -538,11 +613,11 @@ store_param_time(char* buffer, char *param) {
 }
 
 int
-parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, 
-    int *param_count) {
+parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, int *param_count) 
+{
+    ASSERT(payload_len <= CAP_LEN);
 
     /* 0x 0x 0x 01 00 */
-
     int packet_length = uint3korr(payload);
     int pos = 4;
 
@@ -561,8 +636,9 @@ parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id,
 }
 
 int
-parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id) {
-
+parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id) 
+{
+    ASSERT(payload_len <= CAP_LEN);
     int packet_length = uint3korr(payload);
     int pos = 4;
 
@@ -593,8 +669,9 @@ parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id) {
 
 char *
 parse_param(char *payload, uint32 payload_len, int param_count, 
-    char *param_type, char *param, size_t param_len) {
-
+    char *param_type, char *param, size_t param_len) 
+{
+    ASSERT(payload_len <= CAP_LEN);
     int packet_length = uint3korr(payload);
     int pos = 4;
     char *param_type_pos = NULL;

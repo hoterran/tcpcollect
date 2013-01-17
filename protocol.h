@@ -48,6 +48,8 @@ enum ProtoStage {
     RESULT_STAGE = '3'
 };
 
+int isCompressPacket(char *payload, uint32 payload_len, int status);
+
 int is_sql (char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen);
 
 int parse_sql(char *payload, uint32 payload_len, char **sql, uint32 sqlSaveLen);

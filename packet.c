@@ -412,6 +412,23 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         return OK;
     }
 
+    /* first sql is compress protocol
+     * auth packet can pass check
+    */
+    if ((AfterOkPacket == status) || (AfterSqlPacket == status) || (0 == status)) {
+        if (sqlSaveLen == 0) {
+            ret = isCompressPacket(data, datalen, status);
+            if (ret == OK) {
+                hash_set(mp->hash, dst, src,
+                    lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
+                return ERR;
+            } else if (ret == BAD) {
+                return ERR;
+            }
+        }
+    }
+
+    /* omit repeat sql, validate sql */
     if (AfterOkPacket == status) {
         /* must 0x 0x 00 00 03 */
         /* omit chaos packet */
@@ -469,35 +486,6 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
     if (likely(cmd >= 0)) {
         ASSERT((user == NULL) && (db == NULL));
-
-        /* guess sql is compress protocol ?*/
-        if (sqlSaveLen == 0) {
-            if ((COM_QUIT <= cmd) && (cmd < COM_END)) {
-                if (cmd == COM_QUIT) {
-                    if (datalen != 5) {
-                        dump(L_OK, " compress sql1 ");
-                        hash_set(mp->hash, dst, src,
-                            lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
-                        return ERR;
-                    }
-                }
-                if (((cmd != COM_STMT_CLOSE) && (cmd != COM_STMT_EXECUTE)
-                    && (cmd != COM_BINLOG_DUMP)
-                    && (cmd != COM_FIELD_LIST)
-                    ) && (status != AfterPreparePacket)
-                    && (datalen > 7 ) && ( data[7] == '\0')) { //7 is compress length
-                    dump(L_OK, " compress sql2 ");
-                    hash_set(mp->hash, dst, src,
-                        lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
-                    return ERR;
-                }
-            } else {
-                dump(L_OK, " compress sql3 ");
-                hash_set(mp->hash, dst, src,
-                    lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
-                return ERR;
-            }
-        }
 
         /* COM_ packet */
         if (unlikely(cmd == COM_QUIT)) {
@@ -558,6 +546,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
             if (param_count != ERR) {
                 ASSERT(param_count >= 0);
+                ASSERT(100 > param_count);
                 /* prepare cant find, param_type in payload */
                 if (param_count > 0)
                     new_param_type = parse_param(data, datalen, param_count, param_type, param, sizeof(param));
@@ -870,6 +859,11 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
             return ERR;
         }
         uchar c = data[4];
+        uchar c2 = data[3];
+        if ((c2 != 0x02) || (datalen > 200)) {
+            dump(L_ERR, "chao, no auth ok packet1 %u %u %d", datalen, ntohl(tcp->seq), c);
+            return ERR;
+        }
         if (!((c == 0) || (c == 0xfe) || (c == 0xff))) {
             dump(L_ERR, "chao, no auth ok packet %u %u %d", datalen, ntohl(tcp->seq), c);
             return ERR;
@@ -906,6 +900,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         if (ret == 0) {
             ASSERT(stmt_id > 0);
             ASSERT(param_count >= 0);
+            ASSERT(100 > param_count);
             hash_set_param_count(mp->hash, src, dst,
                 lport, rport, stmt_id, param_count);
             dump(L_DEBUG, "prepare ok packet %d %d", stmt_id, param_count);

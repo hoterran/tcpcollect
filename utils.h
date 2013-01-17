@@ -18,6 +18,7 @@ void select_sleep(unsigned int);
 
 #define OK      (0)
 #define ERR     (-1)
+#define BAD     (-2)
 #define PEND    (1)
 
 typedef unsigned short uint16;
