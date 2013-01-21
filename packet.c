@@ -21,6 +21,7 @@
 #include "protocol.h"
 #include "hash.h"
 #include "adlist.h"
+#include "stat.h"
 
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -317,6 +318,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
         char *data = (char*) ((uchar *) tcp + tcp->doff * 4);
         dump(L_DEBUG, "is_in:%c-datalen:%d-tcp:%u [%u]-[%u]", incoming, datalen, ntohl(tcp->seq), dport,sport);
+        addPacketInfo(incoming, datalen, ntohl(tcp->seq), dport,sport);
 
         if (incoming == '1') {
             /* ignore remote MySQL port connect locate random port */
