@@ -9,7 +9,6 @@
 #include "protocol.h"
 #include "packet.h"
 
-
 ulong error_packet(char *payload, uint32 payload_len);
 ulong ok_packet(char *payload, uint32 payload_len);
 ulong resultset_packet(char *payload, uint32 payload_len, ulong num);
@@ -26,7 +25,7 @@ enum ProtoStage *lastPs;
 
 /*
  * sqlSaveLen == 0 call this function, verify it
- * is compress return OK, not return ERR
+ * is compress sql return OK, not return ERR
  * bad sql return BAD
 */
 int isCompressPacket(char *payload, uint32 payload_len, int status)
@@ -95,27 +94,27 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
     -3 bad data
 */
 int
-is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen) 
+is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSaveLen)
 {
     ASSERT(payload_len <= CAP_LEN);
     ASSERT(sqlSaveLen == 0);
 
     if (payload_len < 5) {
         dump(L_ERR, "chao packets %u", payload_len);
-        return -3; 
-    } 
+        return -3;
+    }
     int packet_length = uint3korr(payload);
 
     if (payload_len >= packet_length + 4) {
         /*
-         *   4 4 1 23[\0] n 2(min, without password) n 
+         *   4 4 1 23[\0] n 2(min, without password) n
          *   how to difer sql packet and auth packet
         */
         if (packet_length > 35) {
             int i;
             for( i = 13; i <= 35; i++) {
                 if (payload[i] != '\0') {
-                    return payload[4]; 
+                    return payload[4];
                 }
             }
             *user = payload + 36;
@@ -123,8 +122,8 @@ is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSave
             size_t l = strlen(payload + 36) + 1;
             ASSERT(l > 0);
             // salt and salt len
-            
-            int pwLen = lcb_length(payload + 36 + l) + net_field_length(payload + 36 + l);   
+
+            int pwLen = lcb_length(payload + 36 + l) + net_field_length(payload + 36 + l);
 
             if (payload_len == 36 + l + pwLen) {
                 ASSERT(*db == NULL);
@@ -132,19 +131,19 @@ is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSave
                 ASSERT(36 + l + pwLen < payload_len);
                 // db just \0
                 if (36 + l + pwLen + 1 == payload_len) {
-                    *db = NULL; 
+                    *db = NULL;
                 } else {
-                    *db = payload + 36 + l + pwLen; 
+                    *db = payload + 36 + l + pwLen;
                 }
             }
 
-            #define CLIENT_COMPRESS     32  /* Can use compression protocol */ 
+            #define CLIENT_COMPRESS     32  /* Can use compression protocol */
             unsigned long client_flag = 0;
             /* only 41 protocol */
             client_flag = uint4korr(payload + 4);
             if (client_flag & CLIENT_COMPRESS)
                 return -2; //auth packet compress
-            else 
+            else
                 return -1; // auth packet
         } else {
             return payload[4]; // COM_* Packet
@@ -154,7 +153,7 @@ is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSave
 }
 
 int
-parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen) 
+parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen)
 {
     ASSERT(payload_len <= CAP_LEN);
 
@@ -163,7 +162,7 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen)
         //ASSERT(sqlSaveLen >= payload_len);
         if (sqlSaveLen < payload_len) {
             dump(L_ERR, "chao sql %u %u", sqlSaveLen, payload_len);
-            return 0; 
+            return 0;
         }
         return sqlSaveLen - payload_len;
     }
@@ -194,7 +193,7 @@ parse_sql(char* payload, uint32 payload_len, char **sql, uint32 sqlSaveLen)
 
 long
 parse_result(char* payload, uint32 payload_len,
-    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps) 
+    uchar** myLastData, size_t *myLastDataSize, ulong *myLastNum, enum ProtoStage *ps)
 {
     ASSERT(payload_len <= CAP_LEN);
 
@@ -209,11 +208,11 @@ parse_result(char* payload, uint32 payload_len,
     if (lastData && *lastData) {
 
         /*
-        uchar *p; 
+        uchar *p;
         int i = 0;
         for(p = *lastData; i<*lastDataSize; i++, p++) {
-            //printf("\\x%02x %p\n", *p, p); 
-        }   
+            //printf("\\x%02x %p\n", *p, p);
+        }
         */
 
         ASSERT(*lastDataSize > 0);
@@ -227,13 +226,13 @@ parse_result(char* payload, uint32 payload_len,
         if (*lastPs == RESULT_STAGE) {
             ret = resultset_packet(newData, payload_len + *lastDataSize, *lastNum);
         } else if (*lastPs == FIELD_STAGE) {
-            ret = field_packet(newData, payload_len + *lastDataSize, *lastNum); 
+            ret = field_packet(newData, payload_len + *lastDataSize, *lastNum);
         } else {
             ASSERT(*lastPs == EOF_STAGE);
             ret = eof_packet(newData, payload_len + *lastDataSize);
         }
 
-        free(newData); 
+        free(newData);
         newData = NULL;
 
         return ret;
@@ -247,7 +246,7 @@ parse_result(char* payload, uint32 payload_len,
         }
         if (payload_len > 4) {
             header_packet_length = uint3korr(payload);
-           
+
            if (header_packet_length + 4 <= payload_len) {
                 c = payload[4];
                 if (c == 0) {
@@ -256,17 +255,17 @@ parse_result(char* payload, uint32 payload_len,
                     return error_packet(payload, payload_len);
                 } else if (c == 0xfe) {
                     /* some COM return is eof, but never go here */
-                    dump(L_OK, "secure-auth packet"); 
+                    dump(L_OK, "secure-auth packet");
                     return -3;
                 } else if (c == 0xfb) {
-                    dump(L_OK, "load data local file"); 
+                    dump(L_OK, "load data local file");
                     return -4;
                 } else {
                     /* resultset */
                     ulong field_number = net_field_length(payload + 4);
                     ASSERT(field_number < 500);
                     ulong field_lcb_length = lcb_length(payload + 4);
-                    return field_packet(payload + 4 + field_lcb_length, 
+                    return field_packet(payload + 4 + field_lcb_length,
                         payload_len - 4 - field_lcb_length, field_number);
                 }
            }
@@ -277,7 +276,7 @@ parse_result(char* payload, uint32 payload_len,
 }
 
 ulong
-field_packet(char* payload, uint32 payload_len, ulong field_number) 
+field_packet(char* payload, uint32 payload_len, ulong field_number)
 {
     if (field_number == 0)
         return eof_packet(payload, payload_len);
@@ -286,7 +285,7 @@ field_packet(char* payload, uint32 payload_len, ulong field_number)
             int field_packet_length = uint3korr(payload);
             /* dont care content, so skip it */
             if (field_packet_length + 4 < payload_len) {
-                return field_packet(payload + 4 + field_packet_length, 
+                return field_packet(payload + 4 + field_packet_length,
                     payload_len - 4 - field_packet_length, field_number - 1);
             }
         }
@@ -304,7 +303,7 @@ field_packet(char* payload, uint32 payload_len, ulong field_number)
 }
 
 ulong
-eof_packet(char* payload, uint32 payload_len) 
+eof_packet(char* payload, uint32 payload_len)
 {
     ASSERT(payload_len <= CAP_LEN);
 
@@ -327,7 +326,7 @@ eof_packet(char* payload, uint32 payload_len)
 }
 
 ulong
-resultset_packet(char *payload, uint32 payload_len, ulong num) 
+resultset_packet(char *payload, uint32 payload_len, ulong num)
 {
     int resultset_packet_length = 0;
     if (payload_len > 4) {
@@ -357,31 +356,31 @@ resultset_packet(char *payload, uint32 payload_len, ulong num)
     *lastPs = RESULT_STAGE;
 
     /*
-    uchar *p; 
+    uchar *p;
     int i = 0;
     for(p = payload; i<payload_len; i++, p++) {
-        //printf("\\x%02x %p\n", *p, p); 
-    }   
+        //printf("\\x%02x %p\n", *p, p);
+    }
     */
 
-    //printf("lastDataSize=%ld currentNum=%ld resultsetLength=%d lastData=%x\n", 
+    //printf("lastDataSize=%ld currentNum=%ld resultsetLength=%d lastData=%x\n",
      //   payload_len, num, resultset_packet_length, *lastData);
     return -2;
 }
 
-ulong 
+ulong
 ok_packet(char *payload, uint32 payload_len) {
     ASSERT(payload_len <= CAP_LEN);
     return net_field_length(payload + 5);
 }
 
-ulong 
+ulong
 error_packet(char *payload, uint32 payload_len) {
     ASSERT(payload_len <= CAP_LEN);
     return ERR;
 }
 
-ulong 
+ulong
 net_field_length(char *packet) {
 
     uchar *pos= (uchar *)packet;
@@ -402,7 +401,7 @@ net_field_length(char *packet) {
 }
 
 /* lcb length 1 3 4 9 */
-ulong 
+ulong
 lcb_length(char *packet) {
 
     uchar *pos= (uchar *)packet;
@@ -423,45 +422,44 @@ lcb_length(char *packet) {
     return 9;
 }
 
-static void store_param_null(char *buff) {            
-
+static void store_param_null(char *buff) {
     sprintf(buff + strlen(buff), "NULL,");
 }
 
-static void store_param_tinyint(char *buff, char *param) {            
+static void store_param_tinyint(char *buff, char *param) {
 
     sprintf(buff + strlen(buff), "%d,", param[0]);
 }
 
-static void store_param_short(char *buff, char *param) {           
+static void store_param_short(char *buff, char *param) {
 
     short value = *(short*) param;
     sprintf(buff + strlen(buff), "%hd,", value);
 }
 
-static void store_param_int32(char *buff, char *param) {            
+static void store_param_int32(char *buff, char *param) {
 
     int value = *(int*) param;
     sprintf(buff + strlen(buff), "%d,", value);
-}    
+}
 
-static void store_param_int64(char *buff, char *param) {    
+static void store_param_int64(char *buff, char *param) {
 
     long value = *(long*) param;
     sprintf(buff + strlen(buff), "%ld,", value);
-}    
+}
 
-static void store_param_float(char *buff, char *param) {    
+static void store_param_float(char *buff, char *param) {
 
     float value = *(float*) param;
     sprintf(buff + strlen(buff), "%f,", value);
 }
 
-static void store_param_double(char *buff, char *param) {   
+static void store_param_double(char *buff, char *param) {
 
     double value = *(double*) param;
     sprintf(buff + strlen(buff), "%lf,", value);
-}   
+}
 
 static int store_param_str(char *buff, char *param) {
 
@@ -511,15 +509,15 @@ static int store_param_datetime(char* buffer, char *param) {
     int year = uint2korr(param+1);
     int second_part ;
 
-    if (length == 11) { 
+    if (length == 11) {
         second_part = uint4korr(param + 8);
         /* TODO 30 is need modifed */
         snprintf(buffer + strlen(buffer), 30,"%d-%d-%d %d:%d:%d %d,",
-            year, *(param+3), *(param+4), 
+            year, *(param+3), *(param+4),
             *(param+5), *(param+6), *(param+7), second_part);
     } else if (length == 7) {
         snprintf(buffer + strlen(buffer), 21,"%d-%d-%d %d:%d:%d,",
-            year, *(param+3), *(param+4), 
+            year, *(param+3), *(param+4),
             *(param+5), *(param+6), *(param+7));
     } else if (length == 4) {
         snprintf(buffer + strlen(buffer), 12,"%d-%d-%d,",
@@ -547,7 +545,7 @@ static int store_param_datetime(char* buffer, char *param) {
         second[1]
 
 */
-static int 
+static int
 store_param_time(char* buffer, char *param) {
 
     char length = *param;
@@ -557,7 +555,7 @@ store_param_time(char* buffer, char *param) {
 
     if (length == 12) {
         day = uint4korr(param+2); //skip length and neg
-        second_part = uint4korr(param+9); 
+        second_part = uint4korr(param+9);
         snprintf(buffer + strlen(buffer), 30,"%d %d:%d:%d %d,",
             day, *(param+6), *(param+7), *(param+8), second_part);
     } else if (length == 8) {
@@ -571,7 +569,7 @@ store_param_time(char* buffer, char *param) {
 }
 
 int
-parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, int *param_count) 
+parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, int *param_count)
 {
     ASSERT(payload_len <= CAP_LEN);
 
@@ -587,14 +585,14 @@ parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, int *param_cou
         pos++;          // skip ok
         *stmt_id = uint4korr(payload + pos);
         pos = pos + 4 + 2; // stmt_id, field_count
-        *param_count = uint2korr(payload + pos); 
+        *param_count = uint2korr(payload + pos);
         return 0;
     }
     return -1;
 }
 
 int
-parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id) 
+parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id)
 {
     ASSERT(payload_len <= CAP_LEN);
     int packet_length = uint3korr(payload);
@@ -608,7 +606,7 @@ parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id)
     return -1;
 }
 /*
-    param_count conclude param_type size 
+    param_count conclude param_type size
 
     param is output
 
@@ -626,8 +624,8 @@ parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id)
 */
 
 char *
-parse_param(char *payload, uint32 payload_len, int param_count, 
-    char *param_type, char *param, size_t param_len) 
+parse_param(char *payload, uint32 payload_len, int param_count,
+    char *param_type, char *param, size_t param_len)
 {
     ASSERT(payload_len <= CAP_LEN);
     int packet_length = uint3korr(payload);
@@ -659,25 +657,28 @@ parse_param(char *payload, uint32 payload_len, int param_count,
             type = uint2korr(param_type) & ~signed_bit;
             param_type = param_type + 2;
 
-            // null 
+            /* skip null */
             if(null_pos[i/8] & (1 << (i & 7))) {
                 store_param_null(param);
                 continue;
             }
-            
-            // TODO use param_len 
+
+            /* param_len possible short than param in payload
+             * how to deal?
+            */
             switch (type) {
                 case MYSQL_TYPE_NULL:
+                ASSERT(NULL);
                 store_param_null(param);
                 break;
             case MYSQL_TYPE_TINY:
                 store_param_tinyint(param, payload + pos);
                 pos++;
-                break;                   
+                break;
             case MYSQL_TYPE_SHORT:
                 store_param_short(param, payload + pos);
                 pos = pos + 2;
-                break;                   
+                break;
             case MYSQL_TYPE_LONG:
                 store_param_int32(param, payload + pos);
                 pos = pos + 4;
@@ -696,24 +697,24 @@ parse_param(char *payload, uint32 payload_len, int param_count,
                 break;
             case MYSQL_TYPE_TIME:
                 length = store_param_time(param, payload + pos);
-                pos = pos + length; 
-                break;                       
+                pos = pos + length;
+                break;
             case MYSQL_TYPE_DATE:
-            case MYSQL_TYPE_DATETIME:          
-            case MYSQL_TYPE_TIMESTAMP:         
+            case MYSQL_TYPE_DATETIME:
+            case MYSQL_TYPE_TIMESTAMP:
                 length = store_param_datetime(param, payload + pos);
-                pos = pos + length; 
-                break;                       
-            case MYSQL_TYPE_TINY_BLOB:         
-            case MYSQL_TYPE_MEDIUM_BLOB:   
-            case MYSQL_TYPE_LONG_BLOB:         
-            case MYSQL_TYPE_BLOB:              
-            case MYSQL_TYPE_VARCHAR:           
-            case MYSQL_TYPE_VAR_STRING:    
-            case MYSQL_TYPE_STRING:            
-            case MYSQL_TYPE_DECIMAL:           
-            case MYSQL_TYPE_NEWDECIMAL:    
-                
+                pos = pos + length;
+                break;
+            case MYSQL_TYPE_TINY_BLOB:
+            case MYSQL_TYPE_MEDIUM_BLOB:
+            case MYSQL_TYPE_LONG_BLOB:
+            case MYSQL_TYPE_BLOB:
+            case MYSQL_TYPE_VARCHAR:
+            case MYSQL_TYPE_VAR_STRING:
+            case MYSQL_TYPE_STRING:
+            case MYSQL_TYPE_DECIMAL:
+            case MYSQL_TYPE_NEWDECIMAL:
+
                 length = store_param_str(param, payload + pos);
                 pos = pos + length;
                 break;

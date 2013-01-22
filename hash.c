@@ -374,10 +374,14 @@ hash_get_param_count(struct hash *hash,
             session->next->rport == rport &&
             session->next->lport == lport
         ) {
-
-            *param_count = session->next->param_count;
-            *param_type = session->next->param_type;
-
+            if (stmt_id == session->next->stmt_id) {
+                *param_count = session->next->param_count;
+                *param_type = session->next->param_type;
+            } else {
+                /* TODO next version support */
+                dump(L_ERR, "stmt_id not same %d %d, skip it", stmt_id, session->next->stmt_id); 
+                return -1;
+            }
             return 0;
         }
     }
@@ -434,23 +438,19 @@ hash_set_param_count(struct hash *hash,
             session->next->rport == rport &&
             session->next->lport == lport
         ) {
-
+            /* TODO  only support one stmt_id */
             session->next->tcp_seq = 0;
-//            ASSERT(session->next->is_stmt);
             session->next->stmt_id = stmt_id;
 
             if (session->next->param_count == param_count) 
                 return 0;
             else {
-                //ASSERT(session->next->param_type);
-                //free(session->next->param_type);
                 if (session->next->param_type)
                     free(session->next->param_type);
 
                 session->next->param_type = malloc(2 * param_count);
                 session->next->param_count = param_count;
             }
-            
             return 0;
         }
     }
@@ -478,15 +478,12 @@ hash_set_param (struct hash *hash,
             session->next->lport == lport
         ) {
             session->next->tcp_seq = 0;
-//            ASSERT(session->next->is_stmt);
-            /* TODO need open below ASSERT */
-            //ASSERT(session->next->stmt_id == stmt_id);
+            ASSERT(session->next->stmt_id == stmt_id);
             ASSERT(param_count >= 0);
 
             session->next->tv = tv;
 
             /* copy param_type */
-
             ASSERT(session->next->param_count == param_count);
 
             if (param_type != session->next->param_type) {
@@ -559,8 +556,17 @@ hash_set_internal(struct session *sessions, unsigned long sz,
 
             if (session->next->param) {
                 free(session->next->param);
-                session->next->param = NULL; // prepare then a normal sql, need remove this
+                session->next->param = NULL; // after prepare then a normal sql, need remove this
             }
+            if (cmd == COM_QUERY) {
+                if (session->next->param_type) {
+                    free(session->next->param_type);
+                    session->next->param_type = NULL; // after prepare then a normal sql, need remove this
+                }
+                session->next->param_count = 0;
+                session->next->stmt_id = 0;
+            }
+            
             session->next->tv = value;
 
             if (sql != session->next->sql) {

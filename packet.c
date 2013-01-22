@@ -318,7 +318,7 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 
         char *data = (char*) ((uchar *) tcp + tcp->doff * 4);
         dump(L_DEBUG, "is_in:%c-datalen:%d-tcp:%u [%u]-[%u]", incoming, datalen, ntohl(tcp->seq), dport,sport);
-        addPacketInfo(incoming, datalen, ntohl(tcp->seq), dport,sport);
+        addPacketInfo(incoming, datalen, ntohl(tcp->seq), dport,sport, data);
 
         if (incoming == '1') {
             /* ignore remote MySQL port connect locate random port */
@@ -550,12 +550,15 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 ASSERT(param_count >= 0);
                 ASSERT(100 > param_count);
                 /* prepare cant find, param_type in payload */
-                if (param_count > 0)
+                if ((param_count > 0) 
+                    && (datalen < sizeof(param) - 200 )) {
                     new_param_type = parse_param(data, datalen, param_count, param_type, param, sizeof(param));
+                    ASSERT(param[0]);
+                }
 
-                if (param_count > 0) ASSERT(param[0]);
                 if ((param_type == NULL) && (new_param_type == NULL) && (param_count > 0)) {
-                    dump(L_DEBUG, "execute packet, but param_type cant find");
+                    dump(L_ERR, "execute packet, but param_type cant find, or param too long %u",
+                        datalen);
                     return ERR;
                 }
                 dump(L_DEBUG, "execute packet %s %d %s", sql, cmd, param);
@@ -563,9 +566,14 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     lport, rport, tv, stmt_id, param, new_param_type? new_param_type:param_type, param_count);
             } else {
                 /* is stmt,  sql cant find, possible pcap enter later than sql */
-                dump(L_DEBUG, " stmt, but start pcap too late");
+                dump(L_DEBUG, " stmt, but start pcap too late, or changed stmt_id ");
                 return OK;
             }
+        } else if (unlikely(cmd == COM_STMT_FETCH)) {
+            uint32 len = uint4korr(data + 9); // num rows
+            dump(L_ERR, "fetch %u", len);
+            hash_set(mp->hash, dst, src,
+                lport, rport, tv, NULL, cmd, NULL, NULL, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_SLEEP)) {
             dump(L_DEBUG, "sleep ");
             hash_set(mp->hash, dst, src,
@@ -791,7 +799,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
 
         if ((cmd == COM_BINLOG_DUMP) || (cmd == COM_SET_OPTION) || (cmd == COM_PING)
             || (cmd == COM_STATISTICS) || (cmd == COM_SLEEP) || (cmd == COM_SHUTDOWN)
-            || (cmd == COM_FIELD_LIST)
+            || (cmd == COM_FIELD_LIST) || (cmd == COM_STMT_FETCH)
             ) {
             // this cmd, will return eof packet or error packet
             num = 1;

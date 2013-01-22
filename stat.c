@@ -8,6 +8,7 @@
 
 /* save last packet information for debug */
 #define LAST_PACKETS_NUM 20
+#define PAYLOAD_SNAPSHOT_LEN 20
 
 /* TODO save first ten bytes */
 typedef struct _Packet {
@@ -16,13 +17,14 @@ typedef struct _Packet {
     uint32 tcp_seq;
     uint16 dport;
     uint16 sport;
+    char payload[PAYLOAD_SNAPSHOT_LEN];
 } Packet;
 
 Packet G_packet[LAST_PACKETS_NUM];
 int G_pos;
 
 void addPacketInfo(char incoming, uint32 datalen, uint32 tcp_seq,
-    uint16 dport, uint16 sport) {
+    uint16 dport, uint16 sport, char* payload) {
     ASSERT(G_pos <= LAST_PACKETS_NUM);
     ASSERT((incoming == '1') || (incoming == '0'));
     ASSERT((datalen > 0) && (dport > 0) && (sport > 0));
@@ -35,6 +37,15 @@ void addPacketInfo(char incoming, uint32 datalen, uint32 tcp_seq,
     G_packet[G_pos].tcp_seq = tcp_seq;
     G_packet[G_pos].dport = dport;
     G_packet[G_pos].sport = sport;
+
+    int len = PAYLOAD_SNAPSHOT_LEN;
+    if (datalen < PAYLOAD_SNAPSHOT_LEN) {
+        len = datalen;
+    }
+   
+    memset(G_packet[G_pos].payload, 0, len);
+    memcpy(G_packet[G_pos].payload, payload, len);
+
     G_pos++;
 
     return;
