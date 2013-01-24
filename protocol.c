@@ -38,7 +38,7 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
     }
     uchar c = payload[3];
     if (status != 0) {
-        if (c != 0x00) {
+        if (!((c == 0x00) || (c == 0x01))) {
             dump(L_ERR, "not first sql %u %d", payload_len, c);
             return BAD;
         }

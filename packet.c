@@ -435,7 +435,9 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         /* must 0x 0x 00 00 03 */
         /* omit chaos packet */
         if (sqlSaveLen == 0) {
-            if ((data[2] != '\0') || (data[3] != '\0') || (data[4] >= COM_END) || (data[4] < COM_QUIT)) {
+            /* no auth or sql */
+            if (!(((data[2] == '\0') && (data[3] == '\1')) ||
+                ((data[2] == '\0') || (data[3] == '\0') || (data[4] < COM_END) || (data[4] >= COM_SLEEP)))) {
                 dump(L_ERR, "sql first chao order sql1 %u %u %u", *tcp_seq, datalen, ntohl(tcp->seq));
                 return ERR;
             }
@@ -550,7 +552,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 ASSERT(param_count >= 0);
                 ASSERT(100 > param_count);
                 /* prepare cant find, param_type in payload */
-                if ((param_count > 0) 
+                if ((param_count > 0)
                     && (datalen < sizeof(param) - 200 )) {
                     new_param_type = parse_param(data, datalen, param_count, param_type, param, sizeof(param));
                     ASSERT(param[0]);

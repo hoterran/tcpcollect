@@ -59,7 +59,9 @@ typedef void (*funcp)(struct hash *hash, struct session *session, void *arg);
 static int hash_loop(struct hash *hash, funcp func, void *arg);
 
 static void funcp_print(struct hash *hash, struct session *session, void *arg) {
-    dump(L_OK, "user:%s-sql:%s", session->next->user, session->next->sql);
+    dump(L_OK, "user:%s-sql:%s %u %u %u %u %u %d", session->next->user, session->next->sql, 
+        session->next->tv.tv_sec, session->next->lport, session->next->rport, 
+        session->next->laddr, session->next->raddr, session->next->status);
 }
 
 static void funcp_del(struct hash *hash, struct session *session, void *arg) {
