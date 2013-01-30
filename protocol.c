@@ -54,7 +54,11 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
     */
     if (payload_len > packet_length + 4) {
         dump(L_ERR, "compress packet1 %u %u", payload_len, packet_length);
-        ASSERT(payload_len <= packet_length + 7);
+        if (payload_len > packet_length + 7) {
+            dump(L_ERR,"why here2");
+            printLastPacketInfo(1); 
+        }
+        //ASSERT(payload_len <= packet_length + 7); some strange will assert it
         return OK;
     }
 
@@ -270,7 +274,8 @@ parse_result(char* payload, uint32 payload_len,
                 }
            }
         }
-        dump(L_ERR, "%u %d, %d", payload_len, header_packet_length, c);
+        dump(L_ERR,"why here");
+        printLastPacketInfo(1);
         return -2;
     }
 }
@@ -569,7 +574,7 @@ store_param_time(char* buffer, char *param) {
 }
 
 int
-parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, int *param_count)
+parse_prepare_ok(char *payload, uint32 payload_len, ulong *stmt_id, int *param_count)
 {
     ASSERT(payload_len <= CAP_LEN);
 
@@ -577,10 +582,15 @@ parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, int *param_cou
     int packet_length = uint3korr(payload);
     int pos = 4;
 
-    if (!((packet_length > 0) && (payload[4] == '\0') && (payload[3] == '\1'))){
-        dump(L_ERR, "tail packet, ignore it");
+    if (!((packet_length > 0) && (payload[4] == '\0') && (payload[3] == '\1') && (payload[13] == '\0'))){
+        dump(L_DEBUG, "tail packet, ignore it");
         return -1;
     }
+    if (!((packet_length == 10) || (packet_length == 12))) {
+        dump(L_DEBUG, "tail packet, ignore it2 ");
+        return -1;
+    }
+
     if (payload_len >= packet_length + 4) {
         pos++;          // skip ok
         *stmt_id = uint4korr(payload + pos);
@@ -592,18 +602,27 @@ parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, int *param_cou
 }
 
 int
-parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id)
+parse_stmt_id(char *payload, uint32 payload_len, ulong *stmt_id)
 {
     ASSERT(payload_len <= CAP_LEN);
     int packet_length = uint3korr(payload);
     int pos = 4;
 
+    if (payload_len < 14) {
+        dump(L_ERR, "not execute packet %u", payload_len); 
+        return ERR;
+    }
+    ulong count = uint4korr(payload + 10);
+    if (count != 1) {
+        dump(L_ERR, "execute count is %u error ", count); 
+        return ERR;
+    }
     if (payload_len >= packet_length + 4) {
         pos++;          // skip ok
         *stmt_id = uint4korr(payload + pos);
         return 0;
     }
-    return -1;
+    return ERR;
 }
 /*
     param_count conclude param_type size

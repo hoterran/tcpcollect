@@ -60,12 +60,10 @@ long parse_result(char *payload, uint32 payload_len,
 char* parse_param(char *payload, uint32 payload_len, int param_count, 
     char *param_type, char *param, size_t param_len);
 
-int parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id);
+int parse_stmt_id(char *payload, uint32 payload_len, ulong *stmt_id);
 
-int parse_prepare_ok(char *payload, uint32 payload_len, int *stmt_id, 
+int parse_prepare_ok(char *payload, uint32 payload_len, ulong *stmt_id, 
     int *param_count);
-
-int parse_stmt_id(char *payload, uint32 payload_len, int *stmt_id);
 
 #define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
     ((uint16) ((uchar) (A)[1]) << 8))

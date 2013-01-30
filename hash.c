@@ -40,7 +40,7 @@ struct session {
     struct session *next;
 
 //    char is_stmt;
-    int stmt_id;
+    ulong stmt_id;
     int param_count;
 
     /* each param count 2 bytes */
@@ -359,7 +359,7 @@ hash_clean(struct hash *hash, unsigned long min) {
 int 
 hash_get_param_count(struct hash *hash, 
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         int stmt_id, int *param_count, char **param_type) {
+         ulong stmt_id, int *param_count, char **param_type) {
 
     struct session *session;
     unsigned long port;
@@ -423,7 +423,7 @@ hash_set_sql_len(struct hash *hash,
 int 
 hash_set_param_count(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         int stmt_id, int param_count) {
+         ulong stmt_id, int param_count) {
 
     struct session *session;
     unsigned long port;
@@ -462,7 +462,7 @@ hash_set_param_count(struct hash *hash,
 /* save param, param_type (possible) */
 int 
 hash_set_param (struct hash *hash,
-         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport, struct timeval tv, int stmt_id,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport, struct timeval tv, ulong stmt_id,
           char *param, char *param_type, int param_count) {
 
     struct session *session;
@@ -560,6 +560,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
                 free(session->next->param);
                 session->next->param = NULL; // after prepare then a normal sql, need remove this
             }
+            /*
             if (cmd == COM_QUERY) {
                 if (session->next->param_type) {
                     free(session->next->param_type);
@@ -568,6 +569,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
                 session->next->param_count = 0;
                 session->next->stmt_id = 0;
             }
+            */
             
             session->next->tv = value;
 

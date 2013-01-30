@@ -18,4 +18,8 @@ all:
 	gcc -g -o p17 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p17_mix_sql_prepare.c
 	gcc -g -o p18 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p18_mix_prepare.c
 	gcc -g -o p19 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p19_null_prepare.c
+	gcc -g -o p20 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p20_stmt_fetch_and_cursor.c
+	gcc -g -o p21 -I /usr/local/mysql/include/mysql -L /usr/local/mysql/lib/mysql -lmysqlclient p21_long_preprare_ok.c
+
+
 

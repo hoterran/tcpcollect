@@ -350,13 +350,13 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
                             AfterOkPacket           <          auth ok| error
 
             1.sql       >   AfterSqlPacket
-                            AfterResultPacket       <          resultset
+                            AfterOkPacket       <          resultset
 
             1.prepare   >   AfterPreparePacket
                             AfterPrepareOkPacket    <          prepare-ok
 
             2.execute   >   AfterSqlPacket
-                            AfterResultPacket       <          resultset
+                            AfterOkPacket       <          resultset
 
             stmt_close  >
 
@@ -429,7 +429,6 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             }
         }
     }
-
     /* omit repeat sql, validate sql */
     if (AfterOkPacket == status) {
         /* must 0x 0x 00 00 03 */
@@ -529,7 +528,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
              *      2. only value, can get type from hash, true
              *      3. only value , cant get type from hash, false
             */
-            int stmt_id = ERR;
+            ulong stmt_id = 0;
             char *param_type = NULL;
             char *new_param_type = NULL;
             char param[VALUE_SIZE];
@@ -537,8 +536,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             int param_count = ERR;
 
             /* stmt_id */
-            parse_stmt_id(data, datalen, &stmt_id);
-            if (stmt_id <= 0) {
+            if (ERR == parse_stmt_id(data, datalen, &stmt_id)) {
                 dump(L_DEBUG, "stmt is error, you cant execute");
                 return ERR;
             }
@@ -833,7 +831,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         ASSERT((num == -2) || (num >= 0) || (num == -1) || (num == -4));
         latency = (tv.tv_sec - tv2.tv_sec) * 1000000 + (tv.tv_usec - tv2.tv_usec);
         // resultset
-        if (value) {
+        if (COM_QUERY != cmd) {
             // prepare-statement
             snprintf(tt, sizeof(tt), "%d:%d:%d:%ld",
                 tm->tm_hour, tm->tm_min, tm->tm_sec, tv2.tv_usec);
@@ -901,7 +899,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 lport, rport, tv, NULL, cmd, NULL, NULL, 0, AfterOkPacket);
         }
     } else if (AfterPreparePacket == status) {
-        int stmt_id = ERR;
+        ulong stmt_id = 0;
         int param_count = ERR;
 
         /* only handle first packet, skip field packet and next
