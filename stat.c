@@ -57,9 +57,10 @@ void printPacketArray(char *dst, uchar *src) {
         snprintf(dst + strlen(dst), 5, "%x ", src[i]);
     }
 }
+/* print Last 10(count) packet */
+void printLastPacketInfo(int count) {
+    ASSERT(count >= 0);
 
-/**/
-void printPacketInfo() {
    /* 
      * ---------|------- 
      * <---1----- <---2--
@@ -78,9 +79,16 @@ void printPacketInfo() {
             G_packet[i].incoming, 
             buffer);
         i--;
+        count--;
+        if (count == 0) {
+            return; 
+        }
     }
 
-    for (i = LAST_PACKETS_NUM - 1; i > G_pos - 1 ; i--) {
+    for (i = LAST_PACKETS_NUM - 1; i > G_pos - 1 ; i--, count--) {
+        if (count == 0) {
+            return; 
+        }
         memset(buffer, 0, PAYLOAD_SNAPSHOT_LEN + 4 + 1);
         printPacketArray(buffer, (uchar*)G_packet[i].payload);
         dump(L_OK, "datalen:%u seq:%u dport:%u sport:%u incoming:%c\npacket:\n%s\n",
@@ -91,4 +99,8 @@ void printPacketInfo() {
             G_packet[i].incoming, 
             buffer);
     }
+}
+
+void printPacketInfo() {
+    printLastPacketInfo(LAST_PACKETS_NUM);
 }
