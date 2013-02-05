@@ -39,8 +39,8 @@ struct session {
     
     struct session *next;
 
-//    char is_stmt;
     ulong stmt_id;
+    char is_long_data; /* if this flag, no parse_param, TODO next version */
     int param_count;
 
     /* each param count 2 bytes */
@@ -377,14 +377,43 @@ hash_get_param_count(struct hash *hash,
             session->next->lport == lport
         ) {
             if (stmt_id == session->next->stmt_id) {
-                *param_count = session->next->param_count;
-                *param_type = session->next->param_type;
+                /* is_long_data cant valid param_count in COM_EXECUTE */
+                if ('1' != session->next->is_long_data) {
+                    *param_count = session->next->param_count;
+                    *param_type = session->next->param_type;
+                } else {
+                    dump(L_ERR, "this stmt_id %lu send_long_data, so cant get_param_count", stmt_id); 
+                }
             } else {
                 /* TODO next version support */
                 dump(L_ERR, "stmt_id not same %d %d, skip it", stmt_id, session->next->stmt_id); 
                 return -1;
             }
             return 0;
+        }
+    }
+    return -1;
+}
+
+int
+hash_set_is_long_data(struct hash *hash,
+    uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport, ulong stmt_id) {
+    struct session *session;
+    unsigned long port;
+    
+    port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
+
+    for (session = hash->sessions + port; session->next; session = session->next) {
+        if (
+            session->next->raddr == raddr &&
+            session->next->laddr == laddr &&
+            session->next->rport == rport &&
+            session->next->lport == lport
+        ) {
+            if (stmt_id == session->next->stmt_id) {
+                session->next->is_long_data = '1';
+                return 0;
+            }
         }
     }
     return -1;
@@ -443,6 +472,7 @@ hash_set_param_count(struct hash *hash,
             /* TODO  only support one stmt_id */
             session->next->tcp_seq = 0;
             session->next->stmt_id = stmt_id;
+            session->next->is_long_data = '\0';
 
             if (session->next->param_count == param_count) 
                 return 0;

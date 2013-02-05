@@ -633,6 +633,12 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_DEBUG, s);
             hash_set(mp->hash, dst, src,
                 lport, rport, tv, s, cmd, NULL, db, 0, AfterSqlPacket);
+        } else if (unlikely(cmd == COM_STMT_SEND_LONG_DATA)) {
+            dump(L_ERR, "COM_STMT_SEND_LONG_DATA");
+            ASSERT(datalen > 11);
+            ulong stmt_id = uint4korr(data + 5);
+            hash_set_is_long_data(mp->hash, dst, src, lport, rport, stmt_id);
+            return OK;
         } else if (likely(cmd > 0)) {
             //ASSERT((cmd == COM_QUERY) || (cmd == COM_INIT_DB));
             /*

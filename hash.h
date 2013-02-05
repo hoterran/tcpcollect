@@ -71,13 +71,17 @@ void hash_stat(struct hash* hash);
 
 int
 hash_set_stmt (struct hash *hash, 
-         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         enum SessionStatus status);
+     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+     enum SessionStatus status);
+
+int 
+hash_set_is_long_data (struct hash *hash, 
+     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport, ulong stmt_id);
 
 int 
 hash_set_param_count (struct hash *hash,
-         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
-         ulong stmt_id, int param_count);
+     uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
+     ulong stmt_id, int param_count);
 
 int
 hash_set_param (struct hash *hash, 
