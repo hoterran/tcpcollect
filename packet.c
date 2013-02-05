@@ -104,7 +104,7 @@ start_packet(MysqlPcap *mp) {
     ASSERT(ret >= 0);
 
     snprintf(mp->filter, sizeof(mp->filter),
-        "tcp port %d and tcp[tcpflags] & (tcp-push|tcp-ack) != 0", mp->mysqlPort);
+        "tcp port %d and tcp[tcpflags] & (tcp-push|tcp-ack|tcp-fin) != 0", mp->mysqlPort);
 
     if (pcap_compile(mp->pd, &fcode, mp->filter, 0, mp->netmask) < 0) {
         dump(L_ERR, "pcap_compile failed: %s", pcap_geterr(mp->pd));
@@ -302,9 +302,14 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
 #endif
         ASSERT((sport > 0) && (dport > 0));
 
-        // Capture only "data" packets, ignore TCP control
-        if (datalen == 0)
+        /*  sack datalen > 0 continue
+            fin possible ack = 1 continue
+            only filter pure ack packet
+        */
+        if ((tcp->ack) && (datalen == 0) && (!tcp->fin)) {
+            dump(L_DEBUG, "skip a packet");
             break;
+        }
         /*
          * for loopback, dst & src are all local_address
          * so use port to distinguish
@@ -317,7 +322,8 @@ process_ip(MysqlPcap *mp, const struct ip *ip, struct timeval tv) {
         }
 
         char *data = (char*) ((uchar *) tcp + tcp->doff * 4);
-        dump(L_DEBUG, "is_in:%c-datalen:%d-tcp:%u [%u]-[%u]", incoming, datalen, ntohl(tcp->seq), dport,sport);
+        dump(L_DEBUG, "is_in:%c-datalen:%d-tcp:%u [%u]-[%u] [%d-%d-%d]", incoming, datalen, ntohl(tcp->seq), dport,sport
+            ,tcp->psh, tcp->ack, tcp->fin);
         addPacketInfo(incoming, datalen, ntohl(tcp->seq), dport,sport, data);
 
         if (incoming == '1') {
@@ -386,7 +392,6 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     uint32 sqlSaveLen = 0;
     uint32_t *tcp_seq = NULL;
 
-    ASSERT(datalen > 0);
     ASSERT(data);
     ASSERT(mp && mp->hash && mp->pd);
 
@@ -394,6 +399,14 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
     lport = dport;
     rport = sport;
+
+    if (tcp->fin) {
+        ASSERT(datalen == 0);
+        dump(L_DEBUG, "fin");
+        hash_get_rem(mp->hash, dst, src, lport, rport);
+        return OK;
+    }
+    ASSERT(datalen > 0);
 
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen, &tcp_seq, &cmd);
@@ -548,7 +561,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
             if (param_count != ERR) {
                 ASSERT(param_count >= 0);
-                ASSERT(100 > param_count);
+                ASSERT(1000 > param_count);
                 /* prepare cant find, param_type in payload */
                 if ((param_count > 0)
                     && (datalen < sizeof(param) - 200 )) {
@@ -708,6 +721,13 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     lport = sport;
     rport = dport;
 
+    if (tcp->fin) {
+        ASSERT(datalen == 0);
+        dump(L_DEBUG, "fin");
+        hash_get_rem(mp->hash, src, dst, lport, rport);
+        return OK;
+    }
+    ASSERT(datalen > 0);
     struct timeval tv2;
     time_t tv_t;
     struct tm *tm;
@@ -910,7 +930,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         if (ret == 0) {
             ASSERT(stmt_id > 0);
             ASSERT(param_count >= 0);
-            ASSERT(100 > param_count);
+            ASSERT(1000 > param_count);
             hash_set_param_count(mp->hash, src, dst,
                 lport, rport, stmt_id, param_count);
             dump(L_DEBUG, "prepare ok packet %d %d", stmt_id, param_count);

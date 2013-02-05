@@ -27,7 +27,7 @@ void addPacketInfo(char incoming, uint32 datalen, uint32 tcp_seq,
     uint16 dport, uint16 sport, char* payload) {
     ASSERT(G_pos <= LAST_PACKETS_NUM);
     ASSERT((incoming == '1') || (incoming == '0'));
-    ASSERT((datalen > 0) && (dport > 0) && (sport > 0));
+    ASSERT((datalen >= 0) && (dport > 0) && (sport > 0));
 
     if (G_pos == LAST_PACKETS_NUM) {
         G_pos = 0;
