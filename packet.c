@@ -400,8 +400,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     lport = dport;
     rport = sport;
 
-    if (tcp->fin) {
-        ASSERT(datalen == 0);
+    if ((tcp->fin) && (datalen == 0)) {
         dump(L_DEBUG, "fin");
         hash_get_rem(mp->hash, dst, src, lport, rport);
         return OK;
@@ -426,7 +425,6 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             lport, rport, tv, NULL, 0, NULL, NULL, 0, AfterAuthPwPacket);
         return OK;
     }
-
     /* first sql is compress protocol
      * auth packet can pass check
     */
@@ -681,6 +679,11 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             dump(L_ERR, "no true auth %u", datalen);
             return ERR;
         }
+        if (!user) {
+            dump(L_ERR, "why no user");
+            printLastPacketInfo(1); 
+            return ERR;
+        }
         ASSERT(user);
         //ASSERT(db); db possible NULL
         ASSERT((cmd == -2) || (cmd == -1));
@@ -734,6 +737,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         return OK;
     }
     ASSERT(datalen > 0);
+
     struct timeval tv2;
     time_t tv_t;
     struct tm *tm;
