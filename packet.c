@@ -559,7 +559,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
 
             if (param_count != ERR) {
                 ASSERT(param_count >= 0);
-                ASSERT(1000 > param_count);
+                ASSERT(2000 > param_count);
                 /* prepare cant find, param_type in payload */
                 if ((param_count > 0)
                     && (datalen < sizeof(param) - 200 )) {
@@ -633,7 +633,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 lport, rport, tv, s, cmd, NULL, db, 0, AfterSqlPacket);
         } else if (unlikely(cmd == COM_STMT_SEND_LONG_DATA)) {
             dump(L_ERR, "COM_STMT_SEND_LONG_DATA");
-            ASSERT(datalen > 11);
+            ASSERT(datalen >= 11);
             ulong stmt_id = uint4korr(data + 5);
             hash_set_is_long_data(mp->hash, dst, src, lport, rport, stmt_id);
             return OK;
@@ -730,8 +730,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     lport = sport;
     rport = dport;
 
-    if (tcp->fin) {
-        ASSERT(datalen == 0);
+    if ((tcp->fin) && (datalen == 0)) {
         dump(L_DEBUG, "fin");
         hash_get_rem(mp->hash, src, dst, lport, rport);
         return OK;
@@ -940,7 +939,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         if (ret == 0) {
             ASSERT(stmt_id > 0);
             ASSERT(param_count >= 0);
-            ASSERT(1000 > param_count);
+            ASSERT(2000 > param_count);
             hash_set_param_count(mp->hash, src, dst,
                 lport, rport, stmt_id, param_count);
             dump(L_DEBUG, "prepare ok packet %d %d", stmt_id, param_count);
