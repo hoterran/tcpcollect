@@ -100,6 +100,11 @@ static void funcp_del(struct hash *hash, struct session *session, void *arg) {
 
 struct Arg {time_t now; int idle_time;};
 
+static void funcp_check_count(struct hash *hash, struct session *session, void  *i) {
+    int *i2 = (int*)i;
+    (*i2)++;
+}
+
 /* hash record will delete if idle time longer than 300s */
 static void funcp_delete_idle(struct hash *hash, struct session *session, void *arg) {
   
@@ -118,6 +123,11 @@ static void funcp_delete_idle(struct hash *hash, struct session *session, void *
     }
 }
 
+void hash_clean(struct hash* hash) {
+    hash_loop(hash, funcp_del, NULL);
+    hash_del(hash);
+}
+
 void hash_delete_idle(struct hash* hash, time_t now, int idle_time) {
     struct Arg a ;
     a.now = now;
@@ -133,6 +143,12 @@ void hash_stat(struct hash* hash) {
     dump(L_OK, "hash stat %u-%u", hash->sz, hash->count);
 }
 
+void hash_check_count(struct hash* hash) {
+    int i = 0;
+    hash_loop(hash, funcp_check_count, (void*)&i);
+    ASSERT(hash->count == i);
+}
+
 /* general hash iterator */
 static int hash_loop(struct hash *hash, funcp func, void *arg) {
     unsigned long i;
@@ -141,7 +157,6 @@ static int hash_loop(struct hash *hash, funcp func, void *arg) {
        
         for (session = hash->sessions + i; session && session->next;session = session->next) {
             if (session->next) func(hash, session, arg);
-            
         }
     }
     return 0;
@@ -297,7 +312,7 @@ hash_get_rem(struct hash *hash,
             free(session->next);
             session->next = next;
             
-            hash->count --;
+            hash->count--;
             
             return 1;
         }
@@ -315,44 +330,12 @@ hash_set(struct hash *hash,
     if (hash_set_internal(hash->sessions, hash->sz,
                              laddr, raddr, lport, rport, value, sql, cmd, user, db, sqlSaveLen, status))
     {
-        hash->count ++;
+        hash->count++;
         return 1;
     }
         
     return 0;
                              
-}
-
-int
-hash_clean(struct hash *hash, unsigned long min) {
-    unsigned long i;
- 
-    for (i = 0; i < hash->sz; i ++) {
-        struct session *session;
-        
-        for (session = hash->sessions + i; session->next; session = session->next)
-            if (session->next->tv.tv_sec * 1000000 + session->next->tv.tv_usec <
-                    min)
-            {
-                struct session *next;
-                
-                next = session->next->next;
-                free(session->next);
-                session->next = next;
-                
-                hash->count --;
-                
-                // This break is to prevent a segmentation fault when
-                // session->next is NULL (session will be null next)
-                if (!session->next)
-                    break;
-                
-            }
-            
-    }
-    
-    return 0;
-    
 }
 
 /* save stmt_id, param_count */
@@ -565,6 +548,8 @@ hash_set_internal(struct session *sessions, unsigned long sz,
     
     port = hash_fun(laddr, raddr, lport, rport) % sz;
 
+    dump(L_OK, "%lu-%lu-%u-%u", laddr, raddr, lport, rport);
+
     for (session = sessions + port; session->next; session = session->next) {
         if (
             session->next->raddr == raddr &&
@@ -704,7 +689,8 @@ static int
 hash_load_check(struct hash *hash) {
     if ((hash->count * 100) / hash->sz > MAX_LOAD_PERCENT) {
         struct session *new_sessions, *old_sessions;
-        unsigned long nsz, i;
+        unsigned long nsz, i, count;
+        count = hash->count;
         
         // New container
         nsz = hash_newsz(hash->sz);
@@ -719,23 +705,26 @@ hash_load_check(struct hash *hash) {
         for (i = 0; i < hash->sz; i ++) {
             struct session *session;
             
-            for (session = hash->sessions + i; session->next;
+            for (session = hash->sessions + i; session && session->next;
                     session = session->next)
             {
-                
-                hash_set_internal(new_sessions, nsz, session->laddr,
-                        session->raddr, session->lport, session->rport,
-                        session->tv, session->sql, session->cmd, session->user, session->db,
-                        session->sqlSaveLen ,session->status);
-                        
+                if(session->next) {
+                /* TODO not only this field */
+                    hash_set_internal(new_sessions, nsz, session->next->laddr,
+                            session->next->raddr, session->next->lport, session->next->rport,
+                            session->next->tv, session->next->sql, session->next->cmd, 
+                            session->next->user, session->next->db,
+                            session->next->sqlSaveLen ,session->next->status);
+                }
             }
         }
-
+        //clear, here will clear count, so need save before
+        hash_loop(hash, funcp_del, NULL);
+        hash->count = count;
         // Switch
         hash->sz = nsz;
-        old_sessions = hash->sessions;
+        free(hash->sessions);
         hash->sessions = new_sessions;
-        free(old_sessions);
         
         return 1;
 
@@ -759,3 +748,29 @@ hash_newsz(unsigned long sz) {
     return sz * 2 + 1;
 }
 
+
+#ifdef _HASH_TEST_
+
+int main() {
+   
+   log_init("/tmp/hash", NULL, ".log", L_OK);
+    struct hash *h = hash_new();
+    int i;
+    struct timeval t;
+
+    for(i = 0 ;i < 20000; i++) {
+        hash_set(h, 1, 1,
+            i, i, t, NULL, 0, NULL, NULL, 0, 0);
+        hash_check_count(h);
+
+        if (i % 100 == 0) 
+            hash_get_rem(h, 1, 1, i, i);
+    }
+
+    hash_check_count(h);
+    printf("ok - %lu %lu\n", h->count, h->sz);
+    hash_clean(h);
+    return 0;
+}
+
+#endif 
