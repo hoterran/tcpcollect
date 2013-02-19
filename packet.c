@@ -150,6 +150,7 @@ start_packet(MysqlPcap *mp) {
             struct pcap_stat ps;
             pcap_stats(mp->pd, &ps);
             dump(L_OK, "recv: %u, drop: %u", ps.ps_recv, ps.ps_drop);
+            hash_stat(mp->hash);
         }
         /*
          * pcap_dispatch return 0 not timeout

@@ -548,8 +548,6 @@ hash_set_internal(struct session *sessions, unsigned long sz,
     
     port = hash_fun(laddr, raddr, lport, rport) % sz;
 
-    dump(L_OK, "%lu-%lu-%u-%u", laddr, raddr, lport, rport);
-
     for (session = sessions + port; session->next; session = session->next) {
         if (
             session->next->raddr == raddr &&
@@ -688,7 +686,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
 static int
 hash_load_check(struct hash *hash) {
     if ((hash->count * 100) / hash->sz > MAX_LOAD_PERCENT) {
-        struct session *new_sessions, *old_sessions;
+        struct session *new_sessions;
         unsigned long nsz, i, count;
         count = hash->count;
         
@@ -709,7 +707,7 @@ hash_load_check(struct hash *hash) {
                     session = session->next)
             {
                 if(session->next) {
-                /* TODO not only this field */
+                /* TODO not only copy below field */
                     hash_set_internal(new_sessions, nsz, session->next->laddr,
                             session->next->raddr, session->next->lport, session->next->rport,
                             session->next->tv, session->next->sql, session->next->cmd, 
