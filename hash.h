@@ -34,6 +34,7 @@ enum SessionStatus {    AfterAuthPacket = 1,
                         AfterLocalFilePacket,
                         AfterAuthEofPacket,
                         AfterAuthPwPacket,
+                        AfterBigExeutePacket
                         };
 
 struct hash;

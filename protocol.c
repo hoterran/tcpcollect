@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#define _GNU_SOURCE
 #include <string.h>
 
 #include "utils.h"
@@ -8,6 +9,7 @@
 #include "mysqlpcap.h"
 #include "protocol.h"
 #include "packet.h"
+#include "stat.h"
 
 ulong error_packet(char *payload, uint32 payload_len);
 ulong ok_packet(char *payload, uint32 payload_len);
@@ -40,6 +42,7 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
     if (status != 0) {
         if (!((c == 0x00) || (c == 0x01))) {
             dump(L_ERR, "not first sql %u %d", payload_len, c);
+            printLastPacketInfo(1);
             return BAD;
         }
     }
@@ -220,20 +223,26 @@ parse_result(char* payload, uint32 payload_len,
         */
 
         ASSERT(*lastDataSize > 0);
-        //printf("lastDataSize=%d lastData=%x \n", *lastDataSize, *myLastData);
+        dump(L_DEBUG, "lastDataSize=%d lastData=%x \n", *lastDataSize, *myLastData);
         newData = malloc(payload_len + *lastDataSize);
         memcpy(newData, *lastData, *lastDataSize);
         memcpy(newData + *lastDataSize, payload, payload_len);
         free(*lastData);
         *lastData = NULL;
+	uint32 new_len = payload_len + *lastDataSize;
+	*lastDataSize = 0;
+	ulong tempNum = *lastNum;
+	*lastNum = 0;
 
         if (*lastPs == RESULT_STAGE) {
-            ret = resultset_packet(newData, payload_len + *lastDataSize, *lastNum);
+            ret = resultset_packet(newData, new_len, tempNum);
         } else if (*lastPs == FIELD_STAGE) {
-            ret = field_packet(newData, payload_len + *lastDataSize, *lastNum);
+	    uchar c = newData[3];
+            ret = field_packet(newData, new_len, tempNum);
         } else {
+	    uchar c = newData[3];
             ASSERT(*lastPs == EOF_STAGE);
-            ret = eof_packet(newData, payload_len + *lastDataSize);
+            ret = eof_packet(newData, new_len);
         }
 
         free(newData);
@@ -266,13 +275,31 @@ parse_result(char* payload, uint32 payload_len,
                     return -4;
                 } else {
                     /* resultset */
-                    ulong field_number = net_field_length(payload + 4);
-                    ASSERT(field_number < 500);
-                    ulong field_lcb_length = lcb_length(payload + 4);
-                    return field_packet(payload + 4 + field_lcb_length,
-                        payload_len - 4 - field_lcb_length, field_number);
+                    /* here possible headshake packet or bad packet */
+                    if (header_packet_length > 0 && header_packet_length < 10) {
+                        ulong field_lcb_length = lcb_length(payload + 4); 
+                        ulong field_number = net_field_length(payload + 4); 
+                        ASSERT((field_lcb_length == 1) || (field_lcb_length == 2) || (field_lcb_length == 3));
+                        /*is def, seq must increment ?*/
+                        if ((header_packet_length == field_lcb_length) &&
+                            (field_lcb_length < 4) && (field_number < 500)) {
+                            int header_seq = payload[3];
+                            int field_seq = payload[3 + header_packet_length + 4]; 
+                            int defPos = 4 + header_packet_length + 4;
+                            char *def = strndup(payload + defPos + 1 ,3);
+                            if  ((0x03 == payload[defPos]) &&
+                                (0 == strncmp(def, "def", 3) &&
+                                (header_seq + 1 == field_seq)
+                                )) {
+                                free(def);
+                                return field_packet(payload + 4 + field_lcb_length,
+                                    payload_len - 4 - field_lcb_length, field_number);
+                            }   
+                        free(def);
+                        }   
+                    }
                 }
-           }
+            }
         }
         dump(L_ERR,"why here");
         printLastPacketInfo(1);
@@ -283,11 +310,12 @@ parse_result(char* payload, uint32 payload_len,
 ulong
 field_packet(char* payload, uint32 payload_len, ulong field_number)
 {
+    int field_packet_length = 0;
     if (field_number == 0)
         return eof_packet(payload, payload_len);
     else {
         if (payload_len > 4) {
-            int field_packet_length = uint3korr(payload);
+            field_packet_length = uint3korr(payload);
             /* dont care content, so skip it */
             if (field_packet_length + 4 < payload_len) {
                 return field_packet(payload + 4 + field_packet_length,
@@ -296,14 +324,16 @@ field_packet(char* payload, uint32 payload_len, ulong field_number)
         }
     }
     /* field packet span two packet */
-    dump(L_DEBUG, "field span two packet");
+    dump(L_DEBUG, "field span two packet %u %d", payload_len, field_packet_length);
     ASSERT(*lastData == NULL);
     *lastData = malloc(payload_len + 1);
     memcpy(*lastData, payload, payload_len);
     (*lastData)[payload_len] = 0;
     *lastDataSize = payload_len;
+    //ASSERT(*lastDataSize < 10000);
     *lastNum = field_number;
     *lastPs = FIELD_STAGE;
+    ASSERT(payload_len < 200);
     return -2;
 }
 
@@ -320,12 +350,16 @@ eof_packet(char* payload, uint32 payload_len)
         }
     }
     /* eof packet span two packet */
-    dump(L_DEBUG, "eof span two packet %u\n", payload_len);
+    dump(L_ERR, "eof span two packet %u", payload_len);
+    ASSERT(payload_len < 10);
     ASSERT(*lastData == NULL);
+    ASSERT(*lastDataSize == 0);
+    ASSERT(*lastNum == 0);
     *lastData = malloc(payload_len + 1);
     memcpy(*lastData, payload, payload_len);
     (*lastData)[payload_len] = 0;
     *lastDataSize = payload_len;
+    ASSERT(*lastDataSize < 10000);
     *lastPs = EOF_STAGE;
     return -2;
 }
@@ -642,6 +676,18 @@ parse_stmt_id(char *payload, uint32 payload_len, ulong *stmt_id)
         paramN              N
 */
 
+int check_param_type (char *param_type, int param_count) {
+    short type;
+    const uint signed_bit = 1 << 15;
+    int i = 0;
+    for (;i < param_count; i++) {
+        type = uint2korr(param_type) & ~signed_bit;
+        param_type = param_type + 2;
+	ASSERT((type <= MYSQL_TYPE_GEOMETRY) && (type >= MYSQL_TYPE_DECIMAL));
+    }
+    return 0;
+}
+
 char *
 parse_param(char *payload, uint32 payload_len, int param_count,
     char *param_type, char *param, size_t param_len)
@@ -663,11 +709,16 @@ parse_param(char *payload, uint32 payload_len, int param_count,
         pos++;
 
         /* if =1 use below param_type, else use input param_type */
+	ASSERT((send_types_to_server == 1 ) || (send_types_to_server == 0));
         if (send_types_to_server == 1) {
             param_type = param_type_pos  = payload + pos;
             pos = pos + 2 * param_count; /* each type 2 bytes */
         }
-
+	if (!param_type) {
+		dump(L_ERR, "why here3");
+		printLastPacketInfo(10);
+		return NULL;	
+	}
         int i = 0;
         short type;
         int length;
@@ -687,7 +738,6 @@ parse_param(char *payload, uint32 payload_len, int param_count,
             */
             switch (type) {
                 case MYSQL_TYPE_NULL:
-                ASSERT(NULL);
                 store_param_null(param);
                 break;
             case MYSQL_TYPE_TINY:
@@ -738,6 +788,7 @@ parse_param(char *payload, uint32 payload_len, int param_count,
                 pos = pos + length;
                 break;
             default:
+		ASSERT(NULL);
                 break;
             }
         }

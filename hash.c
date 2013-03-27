@@ -59,9 +59,9 @@ typedef void (*funcp)(struct hash *hash, struct session *session, void *arg);
 static int hash_loop(struct hash *hash, funcp func, void *arg);
 
 static void funcp_print(struct hash *hash, struct session *session, void *arg) {
-    dump(L_OK, "user:%s-sql:%s %u %u %u %u %u %d", session->next->user, session->next->sql, 
+    dump(L_OK, "user:%s-sql:%s %u %u %u %u %u %d %c", session->next->user, session->next->sql, 
         session->next->tv.tv_sec, session->next->lport, session->next->rport, 
-        session->next->laddr, session->next->raddr, session->next->status);
+        session->next->laddr, session->next->raddr, session->next->status, session->next->ps);
 }
 
 static void funcp_del(struct hash *hash, struct session *session, void *arg) {
@@ -402,7 +402,6 @@ hash_set_is_long_data(struct hash *hash,
     return -1;
 }
 
-/* save stmt_id, param_count */
 int 
 hash_set_sql_len(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport,
@@ -425,6 +424,26 @@ hash_set_sql_len(struct hash *hash,
             if (sqlSaveLen == 0) {
                 session->next->status = status;
                 session->next->tcp_seq = 0;
+            }
+           if ((status == AfterSqlPacket) || (status == AfterBigExeutePacket)) {
+               session->next->stmt_id = 0;
+               session->next->is_long_data = 0;
+               session->next->param_count = 0;
+               if (session->next->param_type) {
+                   free(session->next->param_type);
+                   session->next->param_type = NULL;
+               }
+           }
+
+            if ((status == AfterBigExeutePacket) || (status == AfterSqlPacket) || (status == AfterPreparePacket)) {
+                session->next->tcp_seq = 0;
+                if (session->next->lastData) {
+                    free(session->next->lastData);
+                    session->next->lastData = NULL;
+                }
+                session->next->lastDataSize = 0;
+                session->next->lastNum = 0;
+                session->next->ps = '0';
             }
             return 0;
         }
@@ -460,10 +479,11 @@ hash_set_param_count(struct hash *hash,
             if (session->next->param_count == param_count) 
                 return 0;
             else {
-                if (session->next->param_type)
+                if (session->next->param_type) {
                     free(session->next->param_type);
+		    session->next->param_type = NULL;
+		}
 
-                session->next->param_type = malloc(2 * param_count);
                 session->next->param_count = param_count;
             }
             return 0;
@@ -502,7 +522,10 @@ hash_set_param (struct hash *hash,
             ASSERT(session->next->param_count == param_count);
 
             if (param_type != session->next->param_type) {
-                memcpy(session->next->param_type, param_type, 2 * param_count);
+		if (param_type && param_count > 0) {
+			session->next->param_type = malloc(2 * param_count);
+			memcpy(session->next->param_type, param_type, 2 * param_count);
+                }
             }
 
             ASSERT(param);
@@ -556,6 +579,26 @@ hash_set_internal(struct session *sessions, unsigned long sz,
             session->next->lport == lport
         ) {
             session->next->sqlSaveLen = sqlSaveLen;
+           /* if normal sql, clear prepare sql fields */
+           if (status == AfterSqlPacket) {
+               session->next->stmt_id = 0;
+               session->next->is_long_data = 0;
+               session->next->param_count = 0;
+               if (session->next->param_type) {
+                   free(session->next->param_type);
+                   session->next->param_type = NULL;
+               }
+           }
+
+	   if (status == AfterOkPacket) {
+                if (session->next->lastData) {
+                    free(session->next->lastData);
+                    session->next->lastData = NULL;
+                }
+                session->next->lastDataSize = 0;
+                session->next->lastNum = 0;
+                session->next->ps = '0';
+           }
             if ((status == AfterSqlPacket) || (status == AfterPreparePacket)) {
 
                 session->next->tcp_seq = 0;
@@ -566,7 +609,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
                 }
                 session->next->lastDataSize = 0;
                 session->next->lastNum = 0;
-                session->next->ps = 0;
+                session->next->ps = '0';
             }
 
             if (session->next->param) {
@@ -601,6 +644,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
                     }
                     session->next->sql = malloc(sqlLen + 1);
                     snprintf(session->next->sql, sqlLen + 1, "%s", sql);
+		    ASSERT(session->next->ps == '0');
                 }
             }
             session->next->cmd = cmd;
@@ -628,7 +672,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
 
             if (status)
                 session->next->status = status;
-            
+
             return 0;
         }
     }
@@ -645,6 +689,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
     
     session->next->sqlSaveLen = sqlSaveLen;
 
+    session->next->ps = '0';
     session->next->tv = value;
 
     if (sql) {
@@ -707,7 +752,7 @@ hash_load_check(struct hash *hash) {
                     session = session->next)
             {
                 if(session->next) {
-                /* TODO not only copy below field */
+                /* TODO not only this field */
                     hash_set_internal(new_sessions, nsz, session->next->laddr,
                             session->next->raddr, session->next->lport, session->next->rport,
                             session->next->tv, session->next->sql, session->next->cmd, 

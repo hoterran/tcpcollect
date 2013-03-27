@@ -65,6 +65,8 @@ int parse_stmt_id(char *payload, uint32 payload_len, ulong *stmt_id);
 int parse_prepare_ok(char *payload, uint32 payload_len, ulong *stmt_id, 
     int *param_count);
 
+int check_param_type (char *param_type, int param_count);
+
 #define uint2korr(A)    (uint16) (((uint16) ((uchar) (A)[0])) +\
     ((uint16) ((uchar) (A)[1]) << 8))
 

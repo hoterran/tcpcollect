@@ -7,8 +7,8 @@
 #include "log.h"
 
 /* save last packet information for debug */
-#define LAST_PACKETS_NUM 40
-#define PAYLOAD_SNAPSHOT_LEN 30
+#define LAST_PACKETS_NUM 100
+#define PAYLOAD_SNAPSHOT_LEN 40
 
 /* TODO save first ten bytes */
 typedef struct _Packet {

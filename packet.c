@@ -411,8 +411,9 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen, &tcp_seq, &cmd);
 
+    //AfterBigExeutePacket let result set back
     if ((status == AfterFilterUserPacket) || (status == AfterAuthCompressPacket)
-        || (status == AfterLocalFilePacket)) {
+        || (status == AfterLocalFilePacket) || (status == AfterBigExeutePacket)) {
         if ((datalen == 5) && (data[4] == COM_QUIT)) {
             dump(L_DEBUG, "filter user del");
             hash_get_rem(mp->hash, dst, src, lport, rport);
@@ -550,6 +551,14 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             /* stmt_id */
             if (ERR == parse_stmt_id(data, datalen, &stmt_id)) {
                 dump(L_DEBUG, "stmt is error, you cant execute");
+                // here COM_STMT_EXECUTE possible wrong or so big (span many packet)
+                // in current version cant handle multi COM_STMT_EXECUTE packet
+                // so clear stmt_id and param_count, special STATUS
+                // let below packet error 
+                dump(L_ERR, "big COM_STMT_EXECUTE can handle1");
+                printLastPacketInfo(1);
+                hash_set_sql_len(mp->hash, dst, src,
+                    lport, rport, 0, AfterBigExeutePacket);
                 return ERR;
             }
             ASSERT(stmt_id > 0);
@@ -562,18 +571,30 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                 ASSERT(param_count >= 0);
                 ASSERT(2000 > param_count);
                 /* prepare cant find, param_type in payload */
-                if ((param_count > 0)
-                    && (datalen < sizeof(param) - 200 )) {
-                    new_param_type = parse_param(data, datalen, param_count, param_type, param, sizeof(param));
-                    ASSERT(param[0]);
+                if (param_count > 0) {
+                    if (datalen < sizeof(param) - 200 ) {
+                       new_param_type = parse_param(data, datalen, param_count, param_type, param, sizeof(param));
+                    } else {
+                        dump(L_ERR, "big COM_STMT_EXECUTE can handle2 ");
+                        printLastPacketInfo(1);
+                        /*
+                        hash_set_sql_len(mp->hash, dst, src,
+                            lport, rport, 0, AfterBigExeutePacket);
+                        return ERR;
+                        */
+                    }
                 }
 
                 if ((param_type == NULL) && (new_param_type == NULL) && (param_count > 0)) {
-                    dump(L_ERR, "execute packet, but param_type cant find, or param too long %u",
-                        datalen);
+                    dump(L_ERR, "execute packet, param_type cant find%u", datalen);
+                    printLastPacketInfo(1);
+                    hash_set_sql_len(mp->hash, dst, src,
+                        lport, rport, 0, AfterBigExeutePacket);
                     return ERR;
                 }
                 dump(L_DEBUG, "execute packet %s %d %s", sql, cmd, param);
+
+                check_param_type(new_param_type?new_param_type:param_type, param_count);
                 hash_set_param(mp->hash, dst, src,
                     lport, rport, tv, stmt_id, param, new_param_type? new_param_type:param_type, param_count);
             } else {
@@ -653,7 +674,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
             }
 
             ASSERT(sql);
-            dump(L_DEBUG, "sql packet [%s] %d %d %d", sql, cmd, ret, sqlSaveLen);
+            dump(L_DEBUG, "sql packet [%s] %d %d %d %u %u", sql, cmd, ret, sqlSaveLen, lport, rport);
 
             if (sqlSaveLen > 0) {
                 // 2.3.4 but last sql will set status
@@ -775,9 +796,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     }
     if (status > 0) {
         if (*tcp_seq == 0) {
-            if (likely((AfterSqlPacket == status) || (AfterOkPacket == status))) {
+            if (likely((AfterSqlPacket == status) || (AfterOkPacket == status)
+                || (AfterBigExeutePacket == status))) {
                 /* this is packet is resultset first packet */
-                /* 0x 0x 00 01 */
+                /* 0x 0x 00 0x */
                 if (data[2] != '\0') {
                     dump(L_ERR, "first packet is chao order %u %u %d", datalen, ntohl(tcp->seq), data[2]);
                     return ERR;
@@ -817,7 +839,8 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
     }
 
     /* if multi-statement, AfterOkPacket will repeat come here */
-    if (likely((AfterSqlPacket == status) || (AfterOkPacket == status))) {
+    if (likely((AfterSqlPacket == status) || (AfterOkPacket == status)
+        || (AfterBigExeutePacket == status))) {
         if ((cmd < 0) || (!sql)) {
             dump(L_ERR, "chao result, where is cmd or sql %d %s", cmd, sql);
             return ERR;
@@ -843,7 +866,6 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
                 }
             }
         } else {
-            //resultset packet
             num = parse_result(data, datalen, lastData, lastDataSize, lastNum, ps);
         }
         /* if encounter local file dont handle  TODO */
@@ -868,10 +890,10 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
 
             if (mp->isShowSrcIp == 1) {
                 mp->addCache(mp, "%-20.20s%-17.17s%-12lu%-8ld%-10.9s%-12.12s %s [%s]\n", tt,
-                    srcip, latency , num, user, db, sql, value);
+                    srcip, latency , num, user, db, sql, value?value:"");
             } else {
                 mp->addCache(mp, "%-20.20s%-12lu%-8ld%-10.9s%-12.12s %s [%s]\n", tt,
-                    latency, num, user, db, sql, value);
+                    latency, num, user, db, sql, value?value:"");
             }
         } else {
             // normal statement
