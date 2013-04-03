@@ -229,18 +229,18 @@ parse_result(char* payload, uint32 payload_len,
         memcpy(newData + *lastDataSize, payload, payload_len);
         free(*lastData);
         *lastData = NULL;
-	uint32 new_len = payload_len + *lastDataSize;
-	*lastDataSize = 0;
-	ulong tempNum = *lastNum;
-	*lastNum = 0;
+        uint32 new_len = payload_len + *lastDataSize;
+        *lastDataSize = 0;
+        ulong tempNum = *lastNum;
+        *lastNum = 0;
 
         if (*lastPs == RESULT_STAGE) {
             ret = resultset_packet(newData, new_len, tempNum);
         } else if (*lastPs == FIELD_STAGE) {
-	    uchar c = newData[3];
+            uchar c = newData[3];
             ret = field_packet(newData, new_len, tempNum);
         } else {
-	    uchar c = newData[3];
+            uchar c = newData[3];
             ASSERT(*lastPs == EOF_STAGE);
             ret = eof_packet(newData, new_len);
         }

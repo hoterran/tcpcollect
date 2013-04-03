@@ -267,6 +267,52 @@ hash_get(struct hash *hash,
 }
 
 int
+hash_remove_stmt(struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport)
+{
+    struct session *session;
+    unsigned long port;
+
+    port = hash_fun(laddr, raddr, lport, rport) % hash->sz;
+    for (session = hash->sessions + port; session->next; session = session->next)
+        if (
+            session->next->raddr == raddr &&
+            session->next->laddr == laddr &&
+            session->next->rport == rport &&
+            session->next->lport == lport
+        ) {
+	    session->next->stmt_id = 0;	
+	    session->next->is_long_data = '0';
+            session->next->param_count = 0;
+	    
+            if (session->next->sql) {
+                free(session->next->sql);
+                session->next->sql = NULL;
+            }
+            if (session->next->param) {
+                free(session->next->param);
+                session->next->param = NULL;
+            }
+            if (session->next->param_type) {
+                free(session->next->param_type);
+                session->next->param_type = NULL;
+            }
+            if (session->next->lastData) {
+                free(session->next->lastData);
+                session->next->lastData = NULL;
+            }
+            session->next->ps = '0';
+            session->next->lastDataSize = 0;
+            session->next->lastNum = 0;
+	    session->next->sqlSaveLen = 0;
+            session->next->cmd = 0;
+
+            return 1;
+        }
+        
+    return 0;
+}
+int
 hash_get_rem(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport)
 {
@@ -427,7 +473,7 @@ hash_set_sql_len(struct hash *hash,
             }
            if ((status == AfterSqlPacket) || (status == AfterBigExeutePacket)) {
                session->next->stmt_id = 0;
-               session->next->is_long_data = 0;
+               session->next->is_long_data = '0';
                session->next->param_count = 0;
                if (session->next->param_type) {
                    free(session->next->param_type);
@@ -474,7 +520,7 @@ hash_set_param_count(struct hash *hash,
             /* TODO  only support one stmt_id */
             session->next->tcp_seq = 0;
             session->next->stmt_id = stmt_id;
-            session->next->is_long_data = '\0';
+            session->next->is_long_data = '0';
 
             if (session->next->param_count == param_count) 
                 return 0;
@@ -582,7 +628,7 @@ hash_set_internal(struct session *sessions, unsigned long sz,
            /* if normal sql, clear prepare sql fields */
            if (status == AfterSqlPacket) {
                session->next->stmt_id = 0;
-               session->next->is_long_data = 0;
+               session->next->is_long_data = '0';
                session->next->param_count = 0;
                if (session->next->param_type) {
                    free(session->next->param_type);

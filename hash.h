@@ -52,6 +52,9 @@ int hash_get(struct hash *hash,
     struct timeval *result, char **sql, char **user, char **db, char **value,
     uchar ***lastData, size_t **lastDataSize, ulong **lastNum, enum ProtoStage **ps, uint **tcpseq, int *cmd);
 
+int hash_remove_stmt(struct hash *hash,
+         uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport);
+
 int hash_get_rem(struct hash *hash,
          uint32_t laddr, uint32_t raddr, uint16_t lport, uint16_t rport);
 int hash_set(struct hash *hash,
