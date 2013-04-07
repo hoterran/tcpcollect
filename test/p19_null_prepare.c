@@ -45,12 +45,17 @@ int main (int argc, char *argv[]) {
 
     mysql_query(mysql, CREATE_SAMPLE_TABLE);
 
-    mysql_query(mysql, "select * from test_table");
+    stmt = mysql_stmt_init(mysql);
+
+    char *sql = "select * from test_table";
+
+    mysql_stmt_prepare(stmt, sql, strlen(sql));
+
+    mysql_stmt_execute(stmt);               // --------------------------2  ok
     
-    result = mysql_store_result(mysql);
+    while(!mysql_stmt_fetch(stmt)) { // here return resultset
+        printf("%d - %s\n", int_data, str_data); 
+    }
 
-    while(mysql_fetch_row(result));
-
-    mysql_free_result(result);
-
+    mysql_stmt_close(stmt);
 }
