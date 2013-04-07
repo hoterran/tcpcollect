@@ -559,7 +559,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     lport, rport, 0, AfterBigExeutePacket);
                 return ERR;
             }
-            ASSERT(stmt_id >= 0);
+            ASSERT(stmt_id > 0);
 
             /* is param_count(must), param_type(possible) saved ?*/
             hash_get_param_count(mp->hash, dst, src,
@@ -958,7 +958,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         */
         ret = parse_prepare_ok(data, datalen, &stmt_id, &param_count);
         if (ret == 0) {
-            ASSERT(stmt_id >= 0);
+            ASSERT(stmt_id > 0);
             ASSERT(param_count >= 0);
             ASSERT(2000 > param_count);
             hash_set_param_count(mp->hash, src, dst,

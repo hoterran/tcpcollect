@@ -11,7 +11,7 @@
 #include "hash.h"
 #include "log.h"
 
-#define INITIAL_HASH_SZ     2053
+#define INITIAL_HASH_SZ     16427
 #define MAX_LOAD_PERCENT    65
 #define SQL_MAX_LEN         2048
 #define VALUE_MAX_LEN       1024

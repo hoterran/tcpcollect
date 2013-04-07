@@ -36,6 +36,7 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
 
     if (payload_len < 5) {
         dump(L_ERR, "what sql %u", payload_len);
+        printLastPacketInfo(1);
         return BAD;
     }
     uchar c = payload[3];
@@ -48,6 +49,11 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
     }
 
     uint32 packet_length = uint3korr(payload);
+    if (packet_length == 0) {
+        dump(L_ERR, "what sql %u", payload_len);
+        printLastPacketInfo(1); 
+        return BAD;
+    }
 
     /*
         normal
@@ -237,10 +243,10 @@ parse_result(char* payload, uint32 payload_len,
         if (*lastPs == RESULT_STAGE) {
             ret = resultset_packet(newData, new_len, tempNum);
         } else if (*lastPs == FIELD_STAGE) {
-            uchar c = newData[3];
+	    uchar c = newData[3];
             ret = field_packet(newData, new_len, tempNum);
         } else {
-            uchar c = newData[3];
+	    uchar c = newData[3];
             ASSERT(*lastPs == EOF_STAGE);
             ret = eof_packet(newData, new_len);
         }
@@ -279,7 +285,6 @@ parse_result(char* payload, uint32 payload_len,
                     if (header_packet_length > 0 && header_packet_length < 10) {
                         ulong field_lcb_length = lcb_length(payload + 4); 
                         ulong field_number = net_field_length(payload + 4); 
-                        ASSERT((field_lcb_length == 1) || (field_lcb_length == 2) || (field_lcb_length == 3));
                         /*is def, seq must increment ?*/
                         if ((header_packet_length == field_lcb_length) &&
                             (field_lcb_length < 4) && (field_number < 500)) {
@@ -350,7 +355,7 @@ eof_packet(char* payload, uint32 payload_len)
         }
     }
     /* eof packet span two packet */
-    dump(L_ERR, "eof span two packet %u", payload_len);
+    dump(L_DEBUG, "eof span two packet %u", payload_len);
     ASSERT(payload_len < 10);
     ASSERT(*lastData == NULL);
     ASSERT(*lastDataSize == 0);
@@ -709,16 +714,16 @@ parse_param(char *payload, uint32 payload_len, int param_count,
         pos++;
 
         /* if =1 use below param_type, else use input param_type */
-	ASSERT((send_types_to_server == 1 ) || (send_types_to_server == 0));
+        ASSERT((send_types_to_server == 1 ) || (send_types_to_server == 0));
         if (send_types_to_server == 1) {
             param_type = param_type_pos  = payload + pos;
             pos = pos + 2 * param_count; /* each type 2 bytes */
         }
-	if (!param_type) {
-		dump(L_ERR, "why here3");
-		printLastPacketInfo(10);
-		return NULL;	
-	}
+        if (!param_type) {
+            dump(L_ERR, "why here3");
+            printLastPacketInfo(10);
+            return NULL;
+        }
         int i = 0;
         short type;
         int length;
