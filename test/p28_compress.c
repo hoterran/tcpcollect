@@ -23,8 +23,10 @@ int main(int argc, char* argv[])
     char *sql = "select 1";
 
     mysql_query(sock, sql);
-    result= mysql_store_result(sock)
+    result= mysql_store_result(sock);
     row = mysql_fetch_row(result);
+
+    mysql_set_server_option(mysql, MYSQL_OPTION_MULTI_STATEMENTS_OFF);
 
     return 0;
 }

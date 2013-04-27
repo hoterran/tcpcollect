@@ -36,7 +36,6 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
 
     if (payload_len < 5) {
         dump(L_ERR, "what sql %u", payload_len);
-        printLastPacketInfo(1);
         return BAD;
     }
     uchar c = payload[3];
@@ -49,11 +48,6 @@ int isCompressPacket(char *payload, uint32 payload_len, int status)
     }
 
     uint32 packet_length = uint3korr(payload);
-    if (packet_length == 0) {
-        dump(L_ERR, "what sql %u", payload_len);
-        printLastPacketInfo(1); 
-        return BAD;
-    }
 
     /*
         normal
@@ -117,16 +111,18 @@ is_sql(char *payload, uint32 payload_len, char **user, char **db, uint32 sqlSave
         return -3;
     }
     int packet_length = uint3korr(payload);
+    uchar packet_number = payload[3];
 
     if (payload_len >= packet_length + 4) {
         /*
          *   4 4 1 23[\0] n 2(min, without password) n
          *   how to difer sql packet and auth packet
         */
-        if (packet_length > 35) {
+        if ((packet_length > 35) && (packet_number == 0x01)) {
             int i;
             for( i = 13; i <= 35; i++) {
                 if (payload[i] != '\0') {
+                    // is sql
                     return payload[4];
                 }
             }
@@ -243,10 +239,10 @@ parse_result(char* payload, uint32 payload_len,
         if (*lastPs == RESULT_STAGE) {
             ret = resultset_packet(newData, new_len, tempNum);
         } else if (*lastPs == FIELD_STAGE) {
-	    uchar c = newData[3];
+            uchar c = newData[3];
             ret = field_packet(newData, new_len, tempNum);
         } else {
-	    uchar c = newData[3];
+            uchar c = newData[3];
             ASSERT(*lastPs == EOF_STAGE);
             ret = eof_packet(newData, new_len);
         }
@@ -300,7 +296,7 @@ parse_result(char* payload, uint32 payload_len,
                                 return field_packet(payload + 4 + field_lcb_length,
                                     payload_len - 4 - field_lcb_length, field_number);
                             }   
-                        free(def);
+                            free(def);
                         }   
                     }
                 }
@@ -713,17 +709,23 @@ parse_param(char *payload, uint32 payload_len, int param_count,
         char send_types_to_server = payload[pos];
         pos++;
 
+	//possible without send_types_to_server
+	if (pos + 1 > payload_len) {
+            dump(L_ERR, "parse_param failure2 %d %u", pos, payload_len);
+            return NULL;
+        }
+	
         /* if =1 use below param_type, else use input param_type */
-        ASSERT((send_types_to_server == 1 ) || (send_types_to_server == 0));
+	ASSERT((send_types_to_server == 1 ) || (send_types_to_server == 0));
         if (send_types_to_server == 1) {
             param_type = param_type_pos  = payload + pos;
             pos = pos + 2 * param_count; /* each type 2 bytes */
         }
-        if (!param_type) {
-            dump(L_ERR, "why here3");
-            printLastPacketInfo(10);
-            return NULL;
-        }
+	if (!param_type) {
+		dump(L_ERR, "why here3");
+		printLastPacketInfo(10);
+		return NULL;	
+	}
         int i = 0;
         short type;
         int length;
@@ -731,6 +733,13 @@ parse_param(char *payload, uint32 payload_len, int param_count,
         for (;i < param_count; i++) {
             type = uint2korr(param_type) & ~signed_bit;
             param_type = param_type + 2;
+
+            if ((pos > payload_len) || (
+                type > MYSQL_TYPE_GEOMETRY)) {
+                dump(L_ERR, "parse_param failure %d %u, %d",
+                    pos, payload_len ,type);
+                break;
+            }
 
             /* skip null */
             if(null_pos[i/8] & (1 << (i & 7))) {

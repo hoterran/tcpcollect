@@ -406,14 +406,15 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         hash_get_rem(mp->hash, dst, src, lport, rport);
         return OK;
     }
-    ASSERT(datalen > 0);
+    if (datalen == 0) return OK;
 
     status = hash_get_status(mp->hash, dst, src,
         lport, rport, &sql, &sqlSaveLen, &tcp_seq, &cmd);
 
     //AfterBigExeutePacket let result set back
     if ((status == AfterFilterUserPacket) || (status == AfterAuthCompressPacket)
-        || (status == AfterLocalFilePacket) || (status == AfterBigExeutePacket)) {
+        || (status == AfterLocalFilePacket) || (status == AfterBigExeutePacket) 
+        || (status == AfterAuthPacket)) {
         if ((datalen == 5) && (data[4] == COM_QUIT)) {
             dump(L_DEBUG, "filter user del");
             hash_get_rem(mp->hash, dst, src, lport, rport);
@@ -434,8 +435,10 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         if (sqlSaveLen == 0) {
             ret = isCompressPacket(data, datalen, status);
             if (ret == OK) {
+                hash_set_sql_len(mp->hash, dst, src,
+                    lport, rport, 0, AfterBigExeutePacket);
                 hash_set(mp->hash, dst, src,
-                    lport, rport, tv, "compress sql", 0, NULL, NULL, ret, AfterAuthCompressPacket);
+                    lport, rport, tv, NULL, 0, NULL, NULL, ret, AfterAuthCompressPacket);
                 return ERR;
             } else if (ret == BAD) {
                 return ERR;
@@ -475,7 +478,7 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                dump(L_ERR, "sql first chao order sql2 %u %u", datalen, ntohl(tcp->seq));
                return ERR;
             }
-            *tcp_seq =ntohl(tcp->seq) + datalen;
+            *tcp_seq = ntohl(tcp->seq) + datalen;
             dump(L_DEBUG, "first receive sql2");
         } else if (*tcp_seq == ntohl(tcp->seq)) {
             *tcp_seq = ntohl(tcp->seq) + datalen;
@@ -497,12 +500,19 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
         }
     }
     /* if sqlSaveLen > 0, keep old cmd */
-    if (sqlSaveLen == 0)
+    if (sqlSaveLen == 0) {
         cmd = is_sql(data, datalen, &user, &db, sqlSaveLen);
+        uchar c = data[3];
+        if ((cmd >= COM_END) || (c > 0x10)) {
+            dump(L_ERR, "why here 4");
+            printLastPacketInfo(1);
+            return ERR;
+        }
+    }
 
     if (likely(cmd >= 0)) {
         ASSERT((user == NULL) && (db == NULL));
-
+        ASSERT((cmd < COM_END) && (cmd >= COM_QUIT));
         /* COM_ packet */
         if (unlikely(cmd == COM_QUIT)) {
             dump(L_DEBUG, "quit packet %u so remove entry", datalen);
@@ -575,11 +585,9 @@ inbound(MysqlPcap *mp, char* data, uint32 datalen,
                     } else {
                         dump(L_ERR, "big COM_STMT_EXECUTE can handle2 ");
                         printLastPacketInfo(1);
-                        /*
                         hash_set_sql_len(mp->hash, dst, src,
                             lport, rport, 0, AfterBigExeutePacket);
                         return ERR;
-                        */
                     }
                 }
 
@@ -755,7 +763,7 @@ outbound(MysqlPcap *mp, char *data, uint32 datalen,
         hash_get_rem(mp->hash, src, dst, lport, rport);
         return OK;
     }
-    ASSERT(datalen > 0);
+    if (datalen == 0) return OK;
 
     struct timeval tv2;
     time_t tv_t;
