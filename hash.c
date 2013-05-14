@@ -13,7 +13,7 @@
 
 #define INITIAL_HASH_SZ     16427
 #define MAX_LOAD_PERCENT    65
-#define SQL_MAX_LEN         2048
+#define SQL_MAX_LEN         8192
 #define VALUE_MAX_LEN       1024
 
 /* 1: receive auth packet 2: recieve ok packet start work */
