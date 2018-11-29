@@ -312,18 +312,16 @@ ulong
 field_packet(char* payload, uint32 payload_len, ulong field_number)
 {
     int field_packet_length = 0;
-    if (field_number == 0)
-        return eof_packet(payload, payload_len);
-    else {
-        if (payload_len > 4) {
+
+    if (payload_len > 4) {
             field_packet_length = uint3korr(payload);
             /* dont care content, so skip it */
             if (field_packet_length + 4 < payload_len) {
                 return field_packet(payload + 4 + field_packet_length,
                     payload_len - 4 - field_packet_length, field_number - 1);
             }
-        }
     }
+
     /* field packet span two packet */
     dump(L_DEBUG, "field span two packet %u %d", payload_len, field_packet_length);
     ASSERT(*lastData == NULL);
@@ -334,7 +332,7 @@ field_packet(char* payload, uint32 payload_len, ulong field_number)
     //ASSERT(*lastDataSize < 10000);
     *lastNum = field_number;
     *lastPs = FIELD_STAGE;
-    ASSERT(payload_len < 200);
+    if(payload_len < 200) return 0;
     return -2;
 }
 
